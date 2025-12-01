@@ -40,7 +40,7 @@ python -m pytest
 ## Novel system scaffold (FastAPI + Streamlit)
 - Backend: FastAPI app lives under `novel_system/backend`. Run from repo root with `uvicorn novel_system.backend.main:app --reload --host 0.0.0.0 --port 8000`.
 - Healthcheck: `GET /ping` returns `{"status": "ok"}` when the server is up.
-- Frontend: Minimal Streamlit UI at `novel_system/frontend/app.py`, run with `streamlit run novel_system/frontend/app.py`.
+- Frontend: Streamlit UI at `novel_system/frontend/app.py`, run with `streamlit run novel_system/frontend/app.py`. Supports project/chapters CRUD and AI 写作（扩写/润色/草稿）操作。
 - Configuration: Copy/edit `.env` for `POSTGRES_DSN`, `REDIS_URL`, `OPENAI_API_KEY`, etc. Defaults are included for local development.
 
 ## Database & migrations
@@ -58,10 +58,15 @@ python -m pytest
       chapter = Chapter(title="Chapter 1", project=project, summary="Hello")
       session.add(project)
       session.commit()
-  ```
+```
 
 ## Local Postgres + Redis via Docker
 - Script: `novel_system/scripts/start_services.sh` (uses Docker; defaults to Postgres 16 and Redis Stack).
 - Environment overrides: set in `.env` or export before running (e.g., `PG_PORT`, `REDIS_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `REDIS_IMAGE`).
 - Start services: `bash novel_system/scripts/start_services.sh`
 - After containers are up, run `alembic upgrade head`, then start FastAPI/Streamlit as above.
+
+## API quick refs
+- Projects/Chapters: `POST /projects`, `GET /projects`, `POST /projects/{id}/chapters`, `PUT /chapters/{id}`, etc.
+- AI generation: `POST /ai/generate` (prompt/mode), or chapter-specific `POST /chapters/{id}/ai/{expand|rewrite|draft}` (uses OpenAI key from `.env`).
+- Vector search: embeddings stored in Redis (RediSearch index `idx_novel_chunks`) per chapter chunks. Helper service: `novel_system/backend/services/vector_store.py` with `search_related_text(project_id, query, top_k=5)`.

@@ -6,6 +6,11 @@ from novel_system.backend.schemas.chapter import (
     ChapterUpdate,
 )
 from novel_system.backend.schemas.ai import AIGenerateRequest, AIGenerateResponse
+from novel_system.backend.schemas.world_element import (
+    WorldElementCreate,
+    WorldElementRead,
+    WorldElementUpdate,
+)
 
 __all__ = [
     "ProjectCreate",
@@ -17,4 +22,7 @@ __all__ = [
     "ChapterUpdate",
     "AIGenerateRequest",
     "AIGenerateResponse",
+    "WorldElementCreate",
+    "WorldElementRead",
+    "WorldElementUpdate",
 ]

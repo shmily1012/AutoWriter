@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     )
     openai_api_key: str = Field(default="", env="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4.1", env="OPENAI_MODEL")
+    openai_embedding_model: str = Field(
+        default="text-embedding-3-small", env="OPENAI_EMBEDDING_MODEL"
+    )
     environment: Optional[str] = Field(default="development", env="ENVIRONMENT")
 
     class Config:
