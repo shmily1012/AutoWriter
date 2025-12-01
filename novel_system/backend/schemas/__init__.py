@@ -6,6 +6,13 @@ from novel_system.backend.schemas.chapter import (
     ChapterUpdate,
 )
 from novel_system.backend.schemas.ai import AIGenerateRequest, AIGenerateResponse
+from novel_system.backend.schemas.ai_outputs import ChapterAnalysisResult
+from novel_system.backend.schemas.clue import ClueCreate, ClueRead, ClueUpdate
+from novel_system.backend.schemas.character import (
+    CharacterCreate,
+    CharacterRead,
+    CharacterUpdate,
+)
 from novel_system.backend.schemas.world_element import (
     WorldElementCreate,
     WorldElementRead,
@@ -25,4 +32,11 @@ __all__ = [
     "WorldElementCreate",
     "WorldElementRead",
     "WorldElementUpdate",
+    "CharacterCreate",
+    "CharacterRead",
+    "CharacterUpdate",
+    "ClueCreate",
+    "ClueRead",
+    "ClueUpdate",
+    "ChapterAnalysisResult",
 ]

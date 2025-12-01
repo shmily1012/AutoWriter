@@ -102,6 +102,65 @@ def search_related(project_id: int, query: str, top_k: int = 5) -> List[Dict[str
     return resp.json()
 
 
+def list_characters(project_id: int) -> List[Dict[str, Any]]:
+    resp = api_get(f"/projects/{project_id}/characters")
+    resp.raise_for_status()
+    return resp.json()
+
+
+def create_character(project_id: int, payload: Dict[str, Any]) -> Dict[str, Any]:
+    resp = api_post(f"/projects/{project_id}/characters", payload)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def update_character(character_id: int, payload: Dict[str, Any]) -> Dict[str, Any]:
+    resp = api_put(f"/characters/{character_id}", payload)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def ai_improve_character(character_id: int, prompt: str) -> str:
+    resp = api_post(f"/characters/{character_id}/ai/improve", {"prompt": prompt})
+    resp.raise_for_status()
+    return resp.json().get("generated_text", "")
+
+
+def analyze_chapter_api(chapter_id: int) -> Dict[str, Any]:
+    resp = api_post(f"/chapters/{chapter_id}/analyze", {})
+    resp.raise_for_status()
+    return resp.json()
+
+
+def list_clues(project_id: int, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+    url = f"{api_base_url()}/projects/{project_id}/clues"
+    params = {"status_filter": status_filter} if status_filter else {}
+    resp = requests.get(url, params=params)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def create_clue(project_id: int, payload: Dict[str, Any]) -> Dict[str, Any]:
+    resp = api_post(f"/projects/{project_id}/clues", payload)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def update_clue(clue_id: int, payload: Dict[str, Any]) -> Dict[str, Any]:
+    resp = api_put(f"/clues/{clue_id}", payload)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def ai_generate(prompt: str, mode: Optional[str] = None) -> str:
+    payload: Dict[str, Any] = {"prompt": prompt}
+    if mode:
+        payload["mode"] = mode
+    resp = api_post("/ai/generate", payload)
+    resp.raise_for_status()
+    return resp.json().get("generated_text", "")
+
+
 st.title("AI 写作器")
 st.caption("选择章节，编辑内容，使用 AI 按钮扩写/润色/生成草稿。")
 
@@ -109,7 +168,7 @@ col_projects, col_editor = st.columns([1.2, 2.8], gap="large")
 
 # -------- Left column: projects & chapters ----------
 with col_projects:
-    st.subheader("作品 / 章节 / 世界观")
+    st.subheader("作品 / 章节 / 世界观 / 人物 / 伏笔")
 
     # Project creation form
     with st.expander("新建作品", expanded=False):
@@ -193,6 +252,9 @@ with col_projects:
                 except Exception as exc:  # noqa: BLE001
                     st.error(f"创建章节失败: {exc}")
 
+        # Save chapter list in session for other tabs
+        st.session_state["chapter_list_for_tabs"] = chapter_list
+
         # World elements list
         st.markdown("---")
         st.caption("世界观条目")
@@ -250,9 +312,54 @@ with col_projects:
                     except Exception as exc:  # noqa: BLE001
                         st.error(f"创建失败: {exc}")
 
+        # Characters list
+        st.markdown("---")
+        st.caption("人物角色")
+        characters = []
+        if current_project_id:
+            try:
+                characters = list_characters(current_project_id)
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"加载人物失败: {exc}")
+                characters = []
+
+        if characters:
+            for ch in characters:
+                with st.expander(f"{ch['name']} (#{ch['id']}) - {ch.get('role') or ''}", expanded=False):
+                    st.write(ch.get("description") or "")
+                    new_name = st.text_input("姓名", value=ch["name"], key=f"ch_name_{ch['id']}")
+                    new_role = st.text_input("角色定位", value=ch.get("role") or "", key=f"ch_role_{ch['id']}")
+                    new_desc = st.text_area("设定", value=ch.get("description") or "", key=f"ch_desc_{ch['id']}")
+                    new_arc = st.text_area("弧线", value=ch.get("arc") or "", key=f"ch_arc_{ch['id']}")
+                    if st.button("保存角色", key=f"ch_save_{ch['id']}"):
+                        try:
+                            update_character(
+                                ch["id"],
+                                {"name": new_name, "role": new_role, "description": new_desc, "arc": new_arc},
+                            )
+                            st.success("已更新角色")
+                        except Exception as exc:  # noqa: BLE001
+                            st.error(f"更新失败: {exc}")
+
+        with st.expander("新建角色", expanded=False):
+            with st.form(key="new_character_form"):
+                ch_name = st.text_input("姓名", key="ch_name_new")
+                ch_role = st.text_input("角色定位", key="ch_role_new")
+                ch_desc = st.text_area("设定", height=100, key="ch_desc_new")
+                ch_arc = st.text_area("弧线", height=100, key="ch_arc_new")
+                if st.form_submit_button("创建角色"):
+                    try:
+                        create_character(
+                            current_project_id,
+                            {"name": ch_name, "role": ch_role, "description": ch_desc, "arc": ch_arc},
+                        )
+                        st.success("已创建角色")
+                    except Exception as exc:  # noqa: BLE001
+                        st.error(f"创建失败: {exc}")
+
 # -------- Right column: editor & AI ----------
 with col_editor:
-    tabs = st.tabs(["章节编辑", "世界观"])
+    tabs = st.tabs(["章节编辑", "世界观", "人物", "伏笔/线索"])
 
     # -------- Tab: Chapter editing --------
     with tabs[0]:
@@ -284,6 +391,7 @@ with col_editor:
 
                 col_btn1, col_btn2, col_btn3, col_btn_save = st.columns([1, 1, 1, 1])
                 ai_result_placeholder = st.empty()
+                analysis_placeholder = st.empty()
 
                 def handle_ai(action: str):
                     try:
@@ -320,6 +428,107 @@ with col_editor:
                             st.success(f"已保存：{updated.get('title')}")
                         except Exception as exc:  # noqa: BLE001
                             st.error(f"保存失败: {exc}")
+                with st.expander("标记伏笔"):
+                    clue_desc = st.text_area("伏笔描述", height=80, key=f"clue_desc_{cid}")
+                    if st.button("创建伏笔记录", key=f"create_clue_{cid}"):
+                        try:
+                            create_clue(
+                                current_project_id,
+                                {
+                                    "description": clue_desc or (content[:80] if content else "伏笔"),
+                                    "introduced_chapter_id": cid,
+                                    "status": "unresolved",
+                                },
+                            )
+                            st.success("伏笔已创建")
+                        except Exception as exc:  # noqa: BLE001
+                            st.error(f"创建失败: {exc}")
+                if st.button("分析本章（提取人物/设定/伏笔）"):
+                    try:
+                        result = analyze_chapter_api(cid)
+                        st.session_state[f"chapter_analysis_{cid}"] = result
+                        analysis_placeholder.success("分析完成，结果如下：")
+                    except Exception as exc:  # noqa: BLE001
+                        analysis_placeholder.error(f"分析失败: {exc}")
+
+                analysis_data = st.session_state.get(f"chapter_analysis_{cid}")
+                if analysis_data:
+                    st.markdown("**分析结果**")
+                    st.json(analysis_data)
+
+                # Intelligent hints
+                st.markdown("---")
+                st.subheader("AI 智能提示栏")
+                hint_placeholder = st.empty()
+                if st.button("获取智能提示", key=f"smart_hints_{cid}"):
+                    hints = {}
+                    # Related world/chapters via vector search
+                    try:
+                        hints["world_related"] = search_related(
+                            current_project_id, (summary or "") + "\n" + (content or ""), top_k=5
+                        )
+                    except Exception:
+                        hints["world_related"] = []
+                    # Characters matched by name occurrence
+                    try:
+                        chars = list_characters(current_project_id)
+                        matched = [
+                            {"name": c["name"], "role": c.get("role"), "description": c.get("description")}
+                            for c in chars
+                            if c["name"] and c["name"] in (content or "")
+                        ]
+                        hints["characters"] = matched[:5]
+                    except Exception:
+                        hints["characters"] = []
+                    # Clues unresolved, filter by keyword
+                    try:
+                        clues = list_clues(current_project_id, status_filter="unresolved")
+                        key = summary or content or ""
+                        filtered = [
+                            c for c in clues if (key and key[:200].lower() in (c.get("description") or "").lower())
+                            or any(ch.get("name") in (c.get("description") or "") for ch in hints.get("characters", []))
+                        ]
+                        hints["clues"] = filtered[:5]
+                    except Exception:
+                        hints["clues"] = []
+                    # Plot suggestions via GPT
+                    try:
+                        prompt = (
+                            "当前章节内容：\n"
+                            f"{content[:1200] if content else ''}\n\n"
+                            "请给出 3 条下一步剧情/改进建议，使用简短要点。"
+                        )
+                        hints["plot_suggestions"] = ai_generate(prompt, mode="plot_suggestions")
+                    except Exception:
+                        hints["plot_suggestions"] = ""
+                    st.session_state[f"hints_{cid}"] = hints
+
+                hints = st.session_state.get(f"hints_{cid}")
+                if hints:
+                    with hint_placeholder.container():
+                        st.markdown("**相关世界观/片段**")
+                        if hints.get("world_related"):
+                            for item in hints["world_related"]:
+                                st.write(f"- [{item.get('type')}] {item.get('content')}")
+                        else:
+                            st.caption("暂无")
+                        st.markdown("**相关人物**")
+                        if hints.get("characters"):
+                            for ch in hints["characters"]:
+                                st.write(f"- {ch.get('name')}：{(ch.get('description') or '')[:80]}")
+                        else:
+                            st.caption("暂无")
+                        st.markdown("**未回收伏笔提醒**")
+                        if hints.get("clues"):
+                            for cl in hints["clues"]:
+                                st.write(f"- {cl.get('description')}")
+                        else:
+                            st.caption("暂无")
+                        st.markdown("**AI 剧情建议**")
+                        if hints.get("plot_suggestions"):
+                            st.write(hints["plot_suggestions"])
+                        else:
+                            st.caption("暂无")
 
     # -------- Tab: World elements --------
     with tabs[1]:
@@ -371,3 +580,143 @@ with col_editor:
                         except Exception:
                             pass
                     st.success(f"已保存 {success_count} 条世界观条目")
+
+    # -------- Tab: Characters --------
+    with tabs[2]:
+        st.subheader("人物角色")
+        if not current_project_id:
+            st.info("请选择作品")
+        else:
+            # reload characters for editing context
+            chars = []
+            try:
+                chars = list_characters(current_project_id)
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"加载人物失败: {exc}")
+
+            if chars:
+                selected_char = st.selectbox(
+                    "选择角色",
+                    options=[f"{c['name']} (#{c['id']})" for c in chars],
+                )
+                selected_id = int(selected_char.split("#")[-1].rstrip(")"))
+                current_char = next((c for c in chars if c["id"] == selected_id), None)
+            else:
+                current_char = None
+
+            if current_char:
+                name = st.text_input("姓名", value=current_char.get("name", ""))
+                role = st.text_input("角色定位", value=current_char.get("role") or "")
+                desc = st.text_area("设定", value=current_char.get("description") or "", height=160)
+                arc = st.text_area("弧线", value=current_char.get("arc") or "", height=160)
+                ai_prompt_char = st.text_area("AI 优化提示词", value="帮我丰富人物性格与背景", height=120)
+
+                col_c1, col_c2 = st.columns(2)
+                with col_c1:
+                    if st.button("保存角色信息"):
+                        try:
+                            update_character(
+                                current_char["id"],
+                                {"name": name, "role": role, "description": desc, "arc": arc},
+                            )
+                            st.success("已保存角色")
+                        except Exception as exc:  # noqa: BLE001
+                            st.error(f"保存失败: {exc}")
+                with col_c2:
+                    if st.button("AI 优化设定"):
+                        try:
+                            improved = ai_improve_character(current_char["id"], ai_prompt_char)
+                            st.session_state["ai_char_improved"] = improved
+                            st.success("AI 已生成，请酌情写入设定框。")
+                        except Exception as exc:  # noqa: BLE001
+                            st.error(f"AI 调用失败: {exc}")
+                if st.session_state.get("ai_char_improved"):
+                    st.text_area(
+                        "AI 生成结果",
+                        value=st.session_state["ai_char_improved"],
+                        height=180,
+                        key="ai_char_improved_area",
+                    )
+
+            st.markdown("---")
+            with st.expander("新建角色"):
+                with st.form(key="new_character_form_tab"):
+                    ch_name = st.text_input("姓名", key="ch_name_new_tab")
+                    ch_role = st.text_input("角色定位", key="ch_role_new_tab")
+                    ch_desc = st.text_area("设定", height=100, key="ch_desc_new_tab")
+                    ch_arc = st.text_area("弧线", height=100, key="ch_arc_new_tab")
+                    if st.form_submit_button("创建角色", key="create_char_btn_tab"):
+                        try:
+                            create_character(
+                                current_project_id,
+                                {"name": ch_name, "role": ch_role, "description": ch_desc, "arc": ch_arc},
+                            )
+                            st.success("已创建角色")
+                        except Exception as exc:  # noqa: BLE001
+                            st.error(f"创建失败: {exc}")
+
+    # -------- Tab: Clues --------
+    with tabs[3]:
+        st.subheader("伏笔 & 线索")
+        if not current_project_id:
+            st.info("请选择作品")
+        else:
+            status_filter = st.selectbox("按状态过滤", options=["all", "unresolved", "resolved"], index=0)
+            search_term = st.text_input("搜索描述关键词", key="clue_search")
+            try:
+                clues = list_clues(
+                    current_project_id,
+                    status_filter=None if status_filter == "all" else status_filter,
+                )
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"加载伏笔失败: {exc}")
+                clues = []
+
+            if search_term:
+                clues = [c for c in clues if search_term.lower() in (c.get("description") or "").lower()]
+
+            chapter_options = {c["id"]: f"{c['index']+1}. {c['title']}" for c in st.session_state.get("chapter_list_for_tabs", [])}
+            chapter_labels = list(chapter_options.values())
+            label_to_id = {v: k for k, v in chapter_options.items()}
+
+            for clue in clues:
+                with st.expander(f"{clue['description'][:40]} (#{clue['id']}) - {clue['status']}", expanded=False):
+                    desc = st.text_area("描述", value=clue.get("description") or "", key=f"clue_desc_edit_{clue['id']}")
+                    status_val = st.selectbox(
+                        "状态",
+                        options=["unresolved", "resolved"],
+                        index=0 if clue.get("status") == "unresolved" else 1,
+                        key=f"clue_status_{clue['id']}",
+                    )
+                    intro_default = 0
+                    res_default = 0
+                    if clue.get("introduced_chapter_id") in chapter_options:
+                        intro_default = chapter_labels.index(chapter_options[clue["introduced_chapter_id"]]) + 1
+                    if clue.get("resolved_chapter_id") in chapter_options:
+                        res_default = chapter_labels.index(chapter_options[clue["resolved_chapter_id"]]) + 1
+                    introduced_val = st.selectbox(
+                        "埋伏章节",
+                        options=["未设置"] + chapter_labels,
+                        index=intro_default,
+                        key=f"clue_intro_{clue['id']}",
+                    )
+                    resolved_val = st.selectbox(
+                        "回收章节",
+                        options=["未设置"] + chapter_labels,
+                        index=res_default,
+                        key=f"clue_resolved_{clue['id']}",
+                    )
+                    if st.button("保存伏笔", key=f"clue_save_{clue['id']}"):
+                        payload = {
+                            "description": desc,
+                            "status": status_val,
+                        }
+                        if introduced_val != "未设置":
+                            payload["introduced_chapter_id"] = label_to_id[introduced_val]
+                        if resolved_val != "未设置":
+                            payload["resolved_chapter_id"] = label_to_id[resolved_val]
+                        try:
+                            update_clue(clue["id"], payload)
+                            st.success("已更新伏笔")
+                        except Exception as exc:  # noqa: BLE001
+                            st.error(f"更新失败: {exc}")

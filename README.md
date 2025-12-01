@@ -40,7 +40,7 @@ python -m pytest
 ## Novel system scaffold (FastAPI + Streamlit)
 - Backend: FastAPI app lives under `novel_system/backend`. Run from repo root with `uvicorn novel_system.backend.main:app --reload --host 0.0.0.0 --port 8000`.
 - Healthcheck: `GET /ping` returns `{"status": "ok"}` when the server is up.
-- Frontend: Streamlit UI at `novel_system/frontend/app.py`, run with `streamlit run novel_system/frontend/app.py`. Supports project/chapters CRUD and AI 写作（扩写/润色/草稿）操作。
+- Frontend: Streamlit UI at `novel_system/frontend/app.py`, run with `streamlit run novel_system/frontend/app.py`. Supports project/chapters CRUD、世界观/人物管理、伏笔面板、AI 写作（扩写/润色/草稿）与设定/角色优化/章节分析。
 - Configuration: Copy/edit `.env` for `POSTGRES_DSN`, `REDIS_URL`, `OPENAI_API_KEY`, etc. Defaults are included for local development.
 
 ## Database & migrations
@@ -70,3 +70,5 @@ python -m pytest
 - Projects/Chapters: `POST /projects`, `GET /projects`, `POST /projects/{id}/chapters`, `PUT /chapters/{id}`, etc.
 - AI generation: `POST /ai/generate` (prompt/mode), or chapter-specific `POST /chapters/{id}/ai/{expand|rewrite|draft}` (uses OpenAI key from `.env`).
 - Vector search: embeddings stored in Redis (RediSearch index `idx_novel_chunks`) per chapter chunks. Helper service: `novel_system/backend/services/vector_store.py` with `search_related_text(project_id, query, top_k=5)`.
+- World/Characters: `POST /projects/{id}/world-elements` and `.../characters`, `GET` lists, `PUT` updates; world/character content embeds to Redis for retrieval. Character AI improve: `POST /characters/{id}/ai/improve`.
+- Clues: `POST /projects/{id}/clues`, `GET /projects/{id}/clues?status_filter=...`, `PUT /clues/{id}`; chapters可触发 `/chapters/{id}/analyze` 自动提取人物/设定/伏笔。
