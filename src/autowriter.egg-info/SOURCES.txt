@@ -1,0 +1,14 @@
+README.md
+pyproject.toml
+src/autowriter/__init__.py
+src/autowriter/cli.py
+src/autowriter/models.py
+src/autowriter/services.py
+src/autowriter/storage.py
+src/autowriter.egg-info/PKG-INFO
+src/autowriter.egg-info/SOURCES.txt
+src/autowriter.egg-info/dependency_links.txt
+src/autowriter.egg-info/entry_points.txt
+src/autowriter.egg-info/requires.txt
+src/autowriter.egg-info/top_level.txt
+tests/test_services.py

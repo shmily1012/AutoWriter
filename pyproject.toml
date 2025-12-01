@@ -10,13 +10,23 @@ authors = [{ name = "AutoWriter", email = "author@example.com" }]
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.23.0",
+    "sqlalchemy>=2.0.0",
+    "alembic>=1.12.0",
+    "psycopg2-binary>=2.9.0",
+    "redis>=5.0.0",
+    "pydantic-settings>=2.0.0",
+    "streamlit>=1.30.0",
+    "openai>=1.0.0",
+]
 
 [project.scripts]
 autowriter = "autowriter.cli:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "novel_system"]
 
 
 [tool.pytest.ini_options]

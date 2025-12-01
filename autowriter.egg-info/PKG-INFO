@@ -1,3 +1,21 @@
+Metadata-Version: 2.4
+Name: autowriter
+Version: 0.1.0
+Summary: Personal novel writing helper with simple project management and AI-friendly hooks.
+Author-email: AutoWriter <author@example.com>
+License: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.110.0
+Requires-Dist: uvicorn[standard]>=0.23.0
+Requires-Dist: sqlalchemy>=2.0.0
+Requires-Dist: alembic>=1.12.0
+Requires-Dist: psycopg2-binary>=2.9.0
+Requires-Dist: redis>=5.0.0
+Requires-Dist: pydantic-settings>=2.0.0
+Requires-Dist: streamlit>=1.30.0
+Requires-Dist: openai>=1.0.0
+
 # AutoWriter
 
 A lightweight prototype for managing single-author web novel projects with Python.
@@ -38,7 +56,7 @@ python -m pytest
 ```
 
 ## Novel system scaffold (FastAPI + Streamlit)
-- Backend: FastAPI app lives under `novel_system/backend`. Run from repo root with `uvicorn novel_system.backend.main:app --reload --host 0.0.0.0 --port 8000`.
+- Backend: FastAPI app lives under `novel_system/backend`. Run with `uvicorn novel_system.backend.main:app --reload --app-dir novel_system`.
 - Healthcheck: `GET /ping` returns `{"status": "ok"}` when the server is up.
 - Frontend: Minimal Streamlit UI at `novel_system/frontend/app.py`, run with `streamlit run novel_system/frontend/app.py`.
 - Configuration: Copy/edit `.env` for `POSTGRES_DSN`, `REDIS_URL`, `OPENAI_API_KEY`, etc. Defaults are included for local development.
