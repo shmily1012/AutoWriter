@@ -42,3 +42,26 @@ python -m pytest
 - Healthcheck: `GET /ping` returns `{"status": "ok"}` when the server is up.
 - Frontend: Minimal Streamlit UI at `novel_system/frontend/app.py`, run with `streamlit run novel_system/frontend/app.py`.
 - Configuration: Copy/edit `.env` for `POSTGRES_DSN`, `REDIS_URL`, `OPENAI_API_KEY`, etc. Defaults are included for local development.
+
+## Database & migrations
+- SQLAlchemy models live in `novel_system/backend/models/entities.py`; Base/engine/session helpers in `novel_system/backend/db/`.
+- Alembic is configured under `migrations/` with `alembic.ini` in repo root; ensure `POSTGRES_DSN` is set in `.env`.
+- Run migrations: `alembic upgrade head` (from repo root, using the virtualenv where dependencies are installed). Alembic uses the DSN from `.env` via `pydantic-settings`; ensure it’s reachable.
+- Quick insert example (Python REPL):
+  ```python
+  from novel_system.backend.db import SessionLocal, engine, Base
+  from novel_system.backend.models import Project, Chapter
+
+  Base.metadata.create_all(bind=engine)  # optional; migrations preferred
+  with SessionLocal() as session:
+      project = Project(name="Test Project")
+      chapter = Chapter(title="Chapter 1", project=project, summary="Hello")
+      session.add(project)
+      session.commit()
+  ```
+
+## Local Postgres + Redis via Docker
+- Script: `novel_system/scripts/start_services.sh` (uses Docker; defaults to Postgres 16 and Redis Stack).
+- Environment overrides: set in `.env` or export before running (e.g., `PG_PORT`, `REDIS_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `REDIS_IMAGE`).
+- Start services: `bash novel_system/scripts/start_services.sh`
+- After containers are up, run `alembic upgrade head`, then start FastAPI/Streamlit as above.
