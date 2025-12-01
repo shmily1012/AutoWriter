@@ -1,74 +1,71 @@
-# AutoWriter
+# AutoWriter – AI 辅助长篇创作工作台
 
-A lightweight prototype for managing single-author web novel projects with Python.
+一个集项目管理、章节写作、世界观与人物设定、伏笔追踪、向量检索与 OpenAI 能力于一体的原型工具。后端 FastAPI + PostgreSQL + Redis(含向量索引)，前端 Streamlit。
 
-## Features
-- File-based project storage with JSON serialization
-- CLI for creating projects, adding characters/chapters/foreshadows, and inspecting project data
-- Extensible service layer matching the system design document for future AI integrations
-
-## Installation
-```
+## 快速开始
+### 安装
+```bash
 pip install -e .
 ```
+准备 `.env`（参考 `.env.example`），至少配置：
+- `POSTGRES_DSN` 连接可用的 Postgres
+- `REDIS_URL` 指向 Redis Stack（需支持 RediSearch）
+- `OPENAI_API_KEY`（可选，启用 AI/嵌入）
 
-## Usage
-Create a project stored under the default `~/.autowriter` directory:
+本地依赖（可选）：`bash novel_system/scripts/start_services.sh` 启动 Postgres16 + Redis Stack 容器。
+
+### 运行
+后端：
+```bash
+uvicorn novel_system.backend.main:app --host 0.0.0.0 --port 8000
 ```
-autowriter create-project "My Novel" "Author Name" --description "Epic saga"
+前端：
+```bash
+streamlit run novel_system/frontend/app.py
+```
+首个健康检查：`GET /ping` 应返回 `{"status":"ok"}`。
+
+### 数据库
+- 迁移：`alembic upgrade head`（确保 `.env` DSN 可用）
+- SQLAlchemy 模型：`novel_system/backend/models/entities.py`
+- Alembic 配置：`alembic.ini` + `migrations/`
+
+## 功能总览
+- 项目/章节：CRUD，章节编辑支持 AI 扩写/润色/草稿，章节分析自动提取人物/设定/伏笔并写入关联表。
+- 世界观：创建/编辑条目，嵌入存入 Redis，支持相似检索。
+- 人物：角色卡与弧线，AI 优化设定，章节自动抽取人物出场并关联。
+- 伏笔中心：创建/过滤/更新状态，标记埋伏/回收章节，章节内可一键标记伏笔。
+- 向量检索：章节/设定/人物描述分块嵌入 Redis（HNSW，索引 `idx_novel_chunks`），`/ai/search` 返回相关片段。
+- AI 服务：统一封装 OpenAI（角色可选：world_consultant/plot_coach/style_polish 等），prompt 模板集中管理。
+- 写作 UI：Streamlit 多 Tab（章节、世界观、人物、伏笔），右侧“智能提示栏”提供相关设定/人物/伏笔提醒与剧情建议。
+
+## 主要 API（摘选）
+- 项目/章节：`POST /projects`，`GET /projects/{id}`，`POST /projects/{id}/chapters`，`PUT /chapters/{id}`
+- 章节 AI：`POST /chapters/{id}/ai/{expand|rewrite|draft}`，分析 `POST /chapters/{id}/analyze`
+- 世界观：`POST /projects/{id}/world-elements`，`GET /projects/{id}/world-elements`，`PUT /world-elements/{id}`
+- 人物：`POST /projects/{id}/characters`，`GET /projects/{id}/characters`，`PUT /characters/{id}`，AI 优化 `POST /characters/{id}/ai/improve`
+- 伏笔：`POST /projects/{id}/clues`，`GET /projects/{id}/clues?status_filter=...`，`PUT /clues/{id}`
+- 通用生成与检索：`POST /ai/generate`，`POST /ai/search`
+
+## 目录结构（节选）
+```
+novel_system/
+  backend/
+    main.py                  # FastAPI 入口
+    api/routes.py            # API 路由
+    models/entities.py       # ORM 模型
+    schemas/                 # Pydantic 模型
+    services/
+      openai_client.py       # OpenAI 封装（角色化）
+      prompts.py             # 大 prompt 模板
+      vector_store.py        # Redis 向量索引封装
+  frontend/
+    app.py                   # Streamlit UI
+  scripts/
+    start_services.sh        # 本地 PG/Redis
 ```
 
-List and inspect projects:
-```
-autowriter list
-autowriter show <project_id>
-```
-
-Add core data:
-```
-autowriter add-character <project_id> "Hero" --bio "Protagonist" --tags brave loyal
-autowriter add-chapter <project_id> 1 "Prologue" --outline "Setup" --content "Once upon a time"
-autowriter add-foreshadow <project_id> "Mysterious key" --status hinted --first-chapter-id <chapter_id>
-```
-
-## Development
-Run tests with:
-```
-python -m pytest
-```
-
-## Novel system scaffold (FastAPI + Streamlit)
-- Backend: FastAPI app lives under `novel_system/backend`. Run from repo root with `uvicorn novel_system.backend.main:app --reload --host 0.0.0.0 --port 8000`.
-- Healthcheck: `GET /ping` returns `{"status": "ok"}` when the server is up.
-- Frontend: Streamlit UI at `novel_system/frontend/app.py`, run with `streamlit run novel_system/frontend/app.py`. Supports project/chapters CRUD、世界观/人物管理、伏笔面板、AI 写作（扩写/润色/草稿）与设定/角色优化/章节分析。
-- Configuration: Copy/edit `.env` for `POSTGRES_DSN`, `REDIS_URL`, `OPENAI_API_KEY`, etc. Defaults are included for local development.
-
-## Database & migrations
-- SQLAlchemy models live in `novel_system/backend/models/entities.py`; Base/engine/session helpers in `novel_system/backend/db/`.
-- Alembic is configured under `migrations/` with `alembic.ini` in repo root; ensure `POSTGRES_DSN` is set in `.env`.
-- Run migrations: `alembic upgrade head` (from repo root, using the virtualenv where dependencies are installed). Alembic uses the DSN from `.env` via `pydantic-settings`; ensure it’s reachable.
-- Quick insert example (Python REPL):
-  ```python
-  from novel_system.backend.db import SessionLocal, engine, Base
-  from novel_system.backend.models import Project, Chapter
-
-  Base.metadata.create_all(bind=engine)  # optional; migrations preferred
-  with SessionLocal() as session:
-      project = Project(name="Test Project")
-      chapter = Chapter(title="Chapter 1", project=project, summary="Hello")
-      session.add(project)
-      session.commit()
-```
-
-## Local Postgres + Redis via Docker
-- Script: `novel_system/scripts/start_services.sh` (uses Docker; defaults to Postgres 16 and Redis Stack).
-- Environment overrides: set in `.env` or export before running (e.g., `PG_PORT`, `REDIS_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `REDIS_IMAGE`).
-- Start services: `bash novel_system/scripts/start_services.sh`
-- After containers are up, run `alembic upgrade head`, then start FastAPI/Streamlit as above.
-
-## API quick refs
-- Projects/Chapters: `POST /projects`, `GET /projects`, `POST /projects/{id}/chapters`, `PUT /chapters/{id}`, etc.
-- AI generation: `POST /ai/generate` (prompt/mode), or chapter-specific `POST /chapters/{id}/ai/{expand|rewrite|draft}` (uses OpenAI key from `.env`).
-- Vector search: embeddings stored in Redis (RediSearch index `idx_novel_chunks`) per chapter chunks. Helper service: `novel_system/backend/services/vector_store.py` with `search_related_text(project_id, query, top_k=5)`.
-- World/Characters: `POST /projects/{id}/world-elements` and `.../characters`, `GET` lists, `PUT` updates; world/character content embeds to Redis for retrieval. Character AI improve: `POST /characters/{id}/ai/improve`.
-- Clues: `POST /projects/{id}/clues`, `GET /projects/{id}/clues?status_filter=...`, `PUT /clues/{id}`; chapters可触发 `/chapters/{id}/analyze` 自动提取人物/设定/伏笔。
+## 开发小贴士
+- 需要 AI 功能请提供有效 `OPENAI_API_KEY`；嵌入模型可调 `OPENAI_EMBEDDING_MODEL`。
+- Redis 需为 Redis Stack（支持 RediSearch/HNSW）；索引自动按维度创建。
+- 章节编辑右侧“获取智能提示”会调向量检索与 GPT，若无 key 会报错提示。***
