@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Iterable, List, Type, TypeVar
 
 from . import models
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -28,6 +31,7 @@ class FileStorage:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         (self.root / "projects").mkdir(exist_ok=True)
+        logger.info("Initialized FileStorage at %s", self.root)
 
     def _project_path(self, project_id: str) -> Path:
         return self.root / "projects" / f"{project_id}.json"
@@ -36,12 +40,14 @@ class FileStorage:
         path = self._project_path(project.id)
         payload = _dump_dataclass(project)
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+        logger.info("Saved project %s to %s", project.id, path)
 
     def load_project(self, project_id: str) -> models.Project:
         path = self._project_path(project_id)
         if not path.exists():
             raise FileNotFoundError(f"Project '{project_id}' not found")
         data = json.loads(path.read_text())
+        logger.info("Loaded project %s from %s", project_id, path)
         return self._project_from_dict(data)
 
     def list_projects(self) -> List[models.Project]:
@@ -49,6 +55,7 @@ class FileStorage:
         for project_file in (self.root / "projects").glob("*.json"):
             data = json.loads(project_file.read_text())
             projects.append(self._project_from_dict(data))
+        logger.info("Discovered %d project files under %s", len(projects), self.root)
         return sorted(projects, key=lambda p: p.created_at)
 
     @staticmethod
