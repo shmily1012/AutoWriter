@@ -78,6 +78,10 @@ novel_system/
     start_services.sh        # 本地 PG/Redis
 ```
 
+## 设计文档
+- [系统整体架构说明](docs/system%20design.md)
+- [UI 信息架构与页面流程草案](docs/ui-design.md)
+
 ## 开发小贴士
 - 需要 AI 功能请提供有效 `OPENAI_API_KEY`；嵌入模型可调 `OPENAI_EMBEDDING_MODEL`。
 - Redis 需为 Redis Stack（支持 RediSearch/HNSW）；索引自动按维度创建。
