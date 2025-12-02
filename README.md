@@ -30,6 +30,19 @@ streamlit run novel_system/frontend/app.py
 - SQLAlchemy 模型：`novel_system/backend/models/entities.py`
 - Alembic 配置：`alembic.ini` + `migrations/`
 
+### 从本地 FileStorage 迁移
+旧版 CLI 将项目存放在 `~/.autowriter/projects/*.json` 下。为了迁移到当前 FastAPI + Postgres 模型，可使用管理脚本：
+
+```bash
+# 将 legacy JSON 导入数据库（依赖 .env 中的 POSTGRES_DSN）
+python -m novel_system.backend.management.legacy_bridge import --root ~/.autowriter
+
+# 从数据库导出为 legacy 结构，方便回滚/备份
+python -m novel_system.backend.management.legacy_bridge export --output ~/.autowriter_export
+```
+
+导入时会尝试保留章节顺序、角色标签（写入 traits.tags）、设定（转换为 WorldElement）、伏笔状态等信息；导出时会重新生成 legacy JSON 以便老版 CLI 继续读取。
+
 ## 功能总览
 - 项目/章节：CRUD，章节编辑支持 AI 扩写/润色/草稿，章节分析自动提取人物/设定/伏笔并写入关联表。
 - 世界观：创建/编辑条目，嵌入存入 Redis，支持相似检索。
