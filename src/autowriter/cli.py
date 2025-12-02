@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 from textwrap import indent
 
@@ -43,6 +44,13 @@ def build_parser() -> argparse.ArgumentParser:
     add_foreshadow.add_argument("--first-chapter-id")
     add_foreshadow.add_argument("--resolve-chapter-id")
 
+    parser.add_argument(
+        "--log-level",
+        default="WARNING",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set logging verbosity (default: WARNING)",
+    )
+
     return parser
 
 
@@ -80,6 +88,11 @@ def _print_project(project) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    logging.basicConfig(
+        level=getattr(logging, args.log_level),
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
     service = AutoWriterService(args.root)
 
     if args.command == "create-project":
