@@ -5,7 +5,59 @@ from typing import Any, Dict, List, Optional
 import requests
 import streamlit as st
 
-st.set_page_config(page_title="Novel System", page_icon="📚", layout="wide")
+st.set_page_config(page_title="AutoWriter Studio", page_icon="AW", layout="wide")
+
+
+def inject_base_styles() -> None:
+    st.markdown(
+        """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
+        :root {
+            --bg: #0e1116;
+            --panel: rgba(255,255,255,0.04);
+            --muted: #9aa2b1;
+            --accent: #7c8cff;
+            --accent-2: #74d4ff;
+            --border: rgba(255,255,255,0.08);
+        }
+        body, input, textarea, select, button {
+            font-family: 'Space Grotesk', 'IBM Plex Sans', sans-serif;
+            color: #e7ecf5;
+        }
+        .block-container { padding-top: 1.5rem; }
+        .glass-card {
+            background: linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 1rem 1.2rem;
+            box-shadow: 0 14px 50px rgba(0,0,0,0.25);
+        }
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.35rem 0.7rem;
+            border-radius: 12px;
+            background: rgba(124,140,255,0.18);
+            color: #e7ecf5;
+            font-size: 0.85rem;
+            margin-right: 0.35rem;
+        }
+        .muted { color: var(--muted); font-size: 0.9rem; }
+        .metric-card {
+            padding: 0.75rem 1rem;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+        }
+        .step-list { padding-left: 1.2rem; line-height: 1.6; }
+        .step-list li { margin-bottom: 0.4rem; }
+        .mono { font-family: 'IBM Plex Mono', monospace; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 @lru_cache(maxsize=1)
@@ -165,45 +217,46 @@ def ai_generate(prompt: str, mode: Optional[str] = None) -> str:
 
 
 def render_top_bar() -> Dict[str, Any]:
-    st.markdown(
-        """
-        <style>
-        .topbar {padding: 0.5rem 0; border-bottom: 1px solid #e5e5e5;}
-        .pill {padding: 0.25rem 0.75rem; border-radius: 12px; background: #f5f5f5; margin-right: 0.5rem;}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+    col_logo, col_mode, col_controls = st.columns([1.2, 2.8, 2.6])
+    modes = [
+        ("Writing Studio", "writing"),
+        ("Worldbuilding", "world"),
+        ("Characters", "characters"),
+        ("Outline", "outline"),
+        ("Quality", "quality"),
+    ]
 
-    col_logo, col_mode, col_controls = st.columns([1.2, 2.6, 2.2])
     with col_logo:
-        st.markdown("### 📖 AutoWriter Studio")
-        st.caption("写作 IDE · 深色模式友好 · 键盘快捷键支持")
+        st.markdown("#### AutoWriter Studio")
+        st.caption("Writing IDE + notebook for long-form fiction.")
 
     with col_mode:
-        mode = st.radio(
-            "当前模式",
-            options=[
-                "世界观模式",
-                "角色模式",
-                "大纲模式",
-                "写作模式",
-                "审稿 / 质量检查模式",
-            ],
+        labels = [label for label, _ in modes]
+        default_mode = st.session_state.get("ui_mode", "writing")
+        default_index = next((i for i, (_, val) in enumerate(modes) if val == default_mode), 0)
+        selected_label = st.radio(
+            "Work mode",
+            labels,
+            index=default_index,
             horizontal=True,
+            label_visibility="collapsed",
         )
+        selected_mode = dict(modes)[selected_label]
+        st.session_state["ui_mode"] = selected_mode
 
     with col_controls:
-        st.selectbox("AI 模型", options=["GPT-5.x (质量优先)", "速度优先", "通用"], index=0)
-        st.selectbox("作者偏好", options=["爽文风格 A", "推理风格 B", "自定义"], index=0)
-        st.selectbox("主题", options=["浅色", "深色"], index=1)
+        ai_model = st.selectbox("AI model", ["GPT-4.1", "Claude 3.5", "Local draft model"], index=0)
+        persona = st.selectbox("Author voice", ["Neutral", "Cinematic", "Wry narrator"], index=0)
+        tone = st.selectbox("Tone guide", ["Balanced", "Darker", "Lighter"], index=0)
 
-    return {"mode": mode}
+    st.markdown("</div>", unsafe_allow_html=True)
+    return {"mode": selected_mode, "ai_model": ai_model, "persona": persona, "tone": tone}
 
 
 def render_project_switcher(projects: List[Dict[str, Any]]) -> Optional[int]:
     if not projects:
-        st.info("暂无作品，请先在侧栏创建新项目。")
+        st.info("No projects yet. Create one to start your workspace.")
         return None
 
     proj_options = {f"{p['name']} (#{p['id']})": p["id"] for p in projects}
@@ -211,164 +264,176 @@ def render_project_switcher(projects: List[Dict[str, Any]]) -> Optional[int]:
     index = 0
     if selected_project_id and selected_project_id in proj_options.values():
         index = list(proj_options.values()).index(selected_project_id)
-    label = st.selectbox("当前作品", options=list(proj_options.keys()), index=index)
+    label = st.selectbox("Active project", options=list(proj_options.keys()), index=index)
     st.session_state["selected_project_id"] = proj_options[label]
     return proj_options[label]
 
 
 def render_project_tree_sidebar(projects: List[Dict[str, Any]], chapter_list: List[Dict[str, Any]]) -> None:
-    st.sidebar.header("工程树")
-    st.sidebar.caption("快速定位世界观 / 角色 / 大纲 / 写作")
+    st.sidebar.header("Project Map")
+    st.sidebar.caption("World | Characters | Outline | Writing | Quality")
 
     if projects:
         for proj in projects:
-            with st.sidebar.expander(f"📁 {proj['name']} (#{proj['id']})", expanded=proj["id"] == st.session_state.get("selected_project_id")):
-                st.markdown("**项目概览**")
-                st.caption(proj.get("description") or "")
-                st.markdown("**模块**")
-                st.write("🌍 世界观")
-                st.write("👤 角色")
-                st.write("📜 大纲")
-                st.write("✍️ 章节写作")
-                st.write("🧩 伏笔 & 线索")
-                st.write("🕒 版本 & 历史")
+            with st.sidebar.expander(f"[Project] {proj['name']} (#{proj['id']})", expanded=proj["id"] == st.session_state.get("selected_project_id")):
+                st.markdown("**Summary**")
+                st.caption(proj.get("description") or "No description yet.")
+                st.markdown("**Sections**")
+                st.write("- World: settings, factions, places")
+                st.write("- Characters: cast, arcs, relationships")
+                st.write("- Outline: volumes, arcs, beats")
+                st.write("- Chapters: drafts and versions")
+                st.write("- Quality: diagnostics and reports")
+    else:
+        st.sidebar.info("Create a project to unlock navigation.")
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("章节树")
+    st.sidebar.subheader("Chapters")
     if chapter_list:
-        chapter_options = {f"{c['index']+1}. {c['title']} (#{c['id']})": c["id"] for c in chapter_list}
-        selected_label = st.sidebar.radio("章节列表", options=list(chapter_options.keys()))
-        st.session_state["selected_chapter_id"] = chapter_options[selected_label]
+        chapter_options = {f"{c.get('index', idx) + 1}. {c['title']} (#{c['id']})": c["id"] for idx, c in enumerate(chapter_list)}
+        current_label = st.sidebar.radio("Switch chapter", options=list(chapter_options.keys()))
+        st.session_state["selected_chapter_id"] = chapter_options[current_label]
     else:
-        st.sidebar.caption("暂无章节")
+        st.sidebar.caption("No chapters yet.")
 
 
 # ---------------- Feature Panels -----------------
 
 
 def chapter_progress(content: str, expected: int = 2000) -> None:
-    word_count = len(content or "")
-    pct = min(int((word_count / expected) * 100), 120)
+    words = len((content or "").split())
+    pct = min(words / expected, 1.2)
     col_goal, col_progress, col_pace = st.columns(3)
-    col_goal.metric("本章目标", "推进主线 + 埋伏笔", "AI 动态建议")
-    col_progress.metric("进度", f"{word_count} / {expected} 字", f"{pct}%")
-    col_pace.metric("节奏", "正常", "实时评估")
+    col_goal.metric("Target", f"{expected} words", "+ steady pace")
+    col_progress.metric("Current", f"{words} words", f"{int(pct * 100)}% of goal")
+    pace_label = "On track" if pct >= 0.5 else "Warm-up"
+    col_pace.metric("Rhythm", pace_label, "Live")
+    st.progress(min(pct, 1.0))
 
 
 def render_context_panel(current_project_id: int, chapter_data: Dict[str, Any]) -> None:
-    st.markdown("#### 📌 上下文 / 资料")
-    st.markdown("**本章大纲**")
-    st.write(chapter_data.get("summary") or "暂无纲要")
+    st.markdown("#### Context & References")
+    st.markdown("**Summary**")
+    st.write(chapter_data.get("summary") or "No summary yet.")
 
-    st.markdown("**相关角色**")
+    st.markdown("**Cast on stage**")
     try:
         chars = list_characters(current_project_id)
         for ch in chars[:5]:
-            st.write(f"- {ch.get('name')}：{(ch.get('description') or '')[:60]}")
+            st.write(f"- {ch.get('name', 'Unknown')} - {ch.get('description', '')[:80]}")
     except Exception as exc:  # noqa: BLE001
-        st.warning(f"角色加载失败：{exc}")
+        st.warning(f"Characters unavailable: {exc}")
 
-    st.markdown("**世界观条目**")
+    st.markdown("**World notes**")
     try:
         elements = list_world_elements(current_project_id)
         for item in elements[:5]:
-            st.write(f"- [{item.get('type')}] {item.get('title')}")
+            st.write(f"- [{item.get('type', 'item')}] {item.get('title')}")
     except Exception as exc:  # noqa: BLE001
-        st.warning(f"世界观加载失败：{exc}")
+        st.warning(f"World data unavailable: {exc}")
 
-    st.markdown("**伏笔提示**")
+    st.markdown("**Foreshadow & loose threads**")
     try:
         clues = list_clues(current_project_id, status_filter="unresolved")
         for clue in clues[:5]:
-            st.write(f"- {clue.get('description')[:80]}")
+            st.write(f"- {clue.get('description', '')[:90]}")
     except Exception as exc:  # noqa: BLE001
-        st.warning(f"伏笔加载失败：{exc}")
+        st.warning(f"Clues unavailable: {exc}")
 
-    st.markdown("**历史版本**")
-    st.caption("版本快照即将接入，当前暂存于后端。")
+    st.markdown("**Related pulls**")
+    query = st.text_input("Search project memory", value="", placeholder="e.g., rival faction, missing heir, cursed blade")
+    if query:
+        try:
+            hits = search_related(current_project_id, query)
+            for hit in hits:
+                st.write(f"- {hit.get('title', 'Note')}: {hit.get('snippet', '')[:120]}")
+        except Exception as exc:  # noqa: BLE001
+            st.warning(f"Search failed: {exc}")
 
 
 def render_ai_assistant(chapter_id: int, chapter_content: str) -> None:
-    st.markdown("#### 🤖 本章助手")
-    st.markdown("AI Writer Loop")
-    steps = [
-        "生成本章骨架",
-        "三版本初稿",
-        "人工修改",
-        "风格统一 & 润色",
-    ]
-    for i, step in enumerate(steps, start=1):
-        st.markdown(f"- ✅ Step {i}：{step}")
+    st.markdown("#### AI Companion")
+    loop_tab, chat_tab, diagnostics_tab, stash_tab = st.tabs(["Writer Loop", "Dialogue", "Diagnostics", "Stash"])
 
-    ai_prompt = st.text_area("AI 提示词", value="继续写下去，保持节奏紧凑", height=120)
-    col1, col2, col3 = st.columns(3)
-    placeholder = st.empty()
+    with loop_tab:
+        st.markdown("The Writer Loop steps: skeleton -> three drafts -> human edits -> style unify.")
+        prompt = st.text_area(
+            "Working prompt",
+            value=st.session_state.get(f"loop_prompt_{chapter_id}", "Keep POV consistent, honor tone, surface tension between leads."),
+            height=140,
+            key=f"loop_prompt_{chapter_id}",
+        )
+        replace = st.checkbox("Replace editor text instead of appending", key=f"ai_replace_{chapter_id}", value=False)
+        status_placeholder = st.empty()
 
-    def run_ai(action: str) -> None:
-        try:
-            generated = chapter_ai_action(chapter_id, action, ai_prompt)
-            st.session_state[f"chapter_content_{chapter_id}"] = (
-                generated if st.session_state.get("ai_replace", False) else f"{chapter_content}\n\n{generated}".strip()
-            )
-            placeholder.success("AI 生成完成，已写入正文区域。")
-        except Exception as exc:  # noqa: BLE001
-            placeholder.error(f"AI 调用失败: {exc}")
+        def run_ai(action: str, label: str) -> None:
+            try:
+                generated = chapter_ai_action(chapter_id, action, prompt)
+                content_key = f"chapter_content_{chapter_id}"
+                if replace:
+                    st.session_state[content_key] = generated
+                else:
+                    base = st.session_state.get(content_key, chapter_content)
+                    st.session_state[content_key] = f"{base}\n\n{generated}".strip()
+                status_placeholder.success(f"{label} ready and sent to editor.")
+            except Exception as exc:  # noqa: BLE001
+                status_placeholder.error(f"{label} failed: {exc}")
 
-    with col1:
-        if st.button("生成骨架"):
-            run_ai("draft")
-    with col2:
-        if st.button("三版本初稿"):
-            run_ai("expand")
-    with col3:
-        if st.button("风格统一"):
-            run_ai("rewrite")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("Skeleton"):
+                run_ai("draft", "Skeleton")
+        with col2:
+            if st.button("Expand scene"):
+                run_ai("expand", "Expansion")
+        with col3:
+            if st.button("Rewrite tone"):
+                run_ai("rewrite", "Rewrite")
 
-    st.checkbox("生成结果替换正文", value=False, key="ai_replace")
+    with chat_tab:
+        chat_prompt = st.text_area(
+            "Ask about this chapter",
+            value="What is the strongest conflict in this scene?",
+            height=110,
+            key=f"chat_prompt_{chapter_id}",
+        )
+        if st.button("Send chat", key=f"chat_btn_{chapter_id}"):
+            try:
+                reply = ai_generate(chat_prompt, mode="chat")
+                st.session_state["chat_reply"] = reply
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"Chat failed: {exc}")
+        if st.session_state.get("chat_reply"):
+            st.info(st.session_state["chat_reply"])
 
-    st.markdown("---")
-    st.markdown("#### 💬 对话模式")
-    chat_prompt = st.text_area("快速对话", value="帮我想 3 个反转点", height=80)
-    if st.button("发送对话"):
-        try:
-            reply = ai_generate(chat_prompt, mode="chat")
-            st.session_state["chat_reply"] = reply
-        except Exception as exc:  # noqa: BLE001
-            st.error(f"对话失败: {exc}")
-    if st.session_state.get("chat_reply"):
-        st.info(st.session_state["chat_reply"])
+    with diagnostics_tab:
+        st.markdown("Run quick checks for pacing, OOC lines, and duplicate beats.")
+        if st.button("Analyze chapter", key=f"analysis_btn_{chapter_id}"):
+            try:
+                analysis = analyze_chapter_api(chapter_id)
+                st.session_state[f"analysis_{chapter_id}"] = analysis
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"Analysis failed: {exc}")
+        if st.session_state.get(f"analysis_{chapter_id}"):
+            st.json(st.session_state[f"analysis_{chapter_id}"])
 
-    st.markdown("---")
-    st.markdown("#### 🩺 诊断 & 建议")
-    if st.button("运行质量分析"):
-        try:
-            analysis = analyze_chapter_api(chapter_id)
-            st.session_state[f"analysis_{chapter_id}"] = analysis
-            st.success("分析完成")
-        except Exception as exc:  # noqa: BLE001
-            st.error(f"分析失败: {exc}")
-
-    if st.session_state.get(f"analysis_{chapter_id}"):
-        st.json(st.session_state[f"analysis_{chapter_id}"])
-
-    st.markdown("---")
-    st.markdown("#### 📚 备选片段库")
-    st.caption("保留未采用的桥段，便于回填")
-    st.text_area("片段存档", key=f"stash_{chapter_id}", height=160)
+    with stash_tab:
+        st.caption("Hold unused lines or alt versions; drag into the editor when needed.")
+        st.text_area("Scratchpad", key=f"stash_{chapter_id}", height=160)
 
 
 def render_writing_mode(current_project_id: int, chapter_id: Optional[int]) -> None:
     if not current_project_id or not chapter_id:
-        st.info("请选择作品与章节后进入写作模式。")
+        st.info("Select a project and chapter to open Chapter Studio.")
         return
 
     try:
         chapter_data = load_chapter(chapter_id)
     except Exception as exc:  # noqa: BLE001
-        st.error(f"加载章节失败: {exc}")
+        st.error(f"Unable to load chapter: {exc}")
         return
 
-    st.markdown("### ✍️ 章节写作工作台 (Chapter Studio)")
+    st.markdown("### Chapter Studio")
     chapter_progress(chapter_data.get("content") or "")
 
     col_context, col_editor, col_ai = st.columns([1.2, 2.4, 1.4], gap="large")
@@ -377,31 +442,31 @@ def render_writing_mode(current_project_id: int, chapter_id: Optional[int]) -> N
         render_context_panel(current_project_id, chapter_data)
 
     with col_editor:
-        st.markdown("#### 正文编辑区")
-        title = st.text_input("标题", value=chapter_data.get("title", ""))
-        summary = st.text_area("摘要", value=chapter_data.get("summary") or "", height=100)
+        st.markdown("#### Draft workspace")
+        title = st.text_input("Title", value=chapter_data.get("title", ""))
+        summary = st.text_area("Beat summary", value=chapter_data.get("summary") or "", height=90)
         content_key = f"chapter_content_{chapter_id}"
         content = st.text_area(
-            "正文 (Markdown)",
+            "Chapter markdown",
             value=st.session_state.get(content_key, chapter_data.get("content") or ""),
             height=420,
             key=content_key,
         )
 
-        col_tools = st.columns(3)
-        with col_tools[0]:
-            if st.button("✨ 一键润色"):
-                st.session_state[content_key] = f"【润色草案】\n{content}"
-        with col_tools[1]:
-            if st.button("➕ 续写本段"):
-                st.session_state[content_key] = f"{content}\n\n[续写占位]"
-        with col_tools[2]:
-            if st.button("🎭 换情绪版本"):
-                st.session_state[content_key] = f"{content}\n\n[情绪版草稿]"
+        quick_cols = st.columns(3)
+        with quick_cols[0]:
+            if st.button("Tag turning point"):
+                st.session_state[content_key] = f"{content}\n\n[TURNING POINT]\n"
+        with quick_cols[1]:
+            if st.button("Insert beat checklist"):
+                st.session_state[content_key] = f"{content}\n\n- Setup\n- Tension\n- Payoff\n"
+        with quick_cols[2]:
+            if st.button("Mark for polish"):
+                st.session_state[content_key] = f"{content}\n\n[POLISH ME]\n"
 
-        col_save = st.columns([1, 1])
-        with col_save[0]:
-            if st.button("保存章节"):
+        save_cols = st.columns(2)
+        with save_cols[0]:
+            if st.button("Save chapter"):
                 try:
                     save_chapter(
                         chapter_id,
@@ -409,17 +474,17 @@ def render_writing_mode(current_project_id: int, chapter_id: Optional[int]) -> N
                         summary=summary,
                         content=st.session_state.get(content_key, content),
                     )
-                    st.success("章节已保存")
+                    st.success("Chapter saved.")
                 except Exception as exc:  # noqa: BLE001
-                    st.error(f"保存失败: {exc}")
-        with col_save[1]:
-            if st.button("分析节奏"):
+                    st.error(f"Save failed: {exc}")
+        with save_cols[1]:
+            if st.button("Run diagnostics"):
                 try:
                     analysis = analyze_chapter_api(chapter_id)
                     st.session_state[f"analysis_{chapter_id}"] = analysis
-                    st.success("节奏图已更新")
+                    st.success("Analysis ready in the AI panel.")
                 except Exception as exc:  # noqa: BLE001
-                    st.error(f"分析失败: {exc}")
+                    st.error(f"Diagnostics failed: {exc}")
 
     with col_ai:
         render_ai_assistant(chapter_id, st.session_state.get(content_key, chapter_data.get("content") or ""))
@@ -429,171 +494,178 @@ def render_writing_mode(current_project_id: int, chapter_id: Optional[int]) -> N
 
 
 def render_world_mode(current_project_id: int) -> None:
-    st.markdown("### 🌍 世界观工作台")
+    st.markdown("### Worldbuilding Desk")
     if not current_project_id:
-        st.info("请选择作品以管理世界观")
+        st.info("Select a project to explore the world map.")
         return
 
     col_tree, col_detail, col_ai = st.columns([1.2, 1.8, 1.2], gap="large")
     with col_tree:
-        st.markdown("#### 结构树")
+        st.markdown("#### World tree")
         try:
             elements = list_world_elements(current_project_id)
         except Exception as exc:  # noqa: BLE001
-            st.error(f"加载失败: {exc}")
+            st.error(f"Unable to load world elements: {exc}")
             elements = []
         for el in elements:
-            st.write(f"- [{el.get('type')}] {el.get('title')} (#{el.get('id')})")
+            st.write(f"- [{el.get('type', 'item')}] {el.get('title')} (#{el.get('id')})")
 
     with col_detail:
-        st.markdown("#### 条目详情 / 新建")
+        st.markdown("#### Add / edit element")
         with st.form("create_world_element_form"):
-            we_type = st.text_input("类型", key="we_type_new")
-            we_title = st.text_input("标题", key="we_title_new")
-            we_content = st.text_area("内容", height=140, key="we_content_new")
-            if st.form_submit_button("创建世界观条目"):
+            we_type = st.text_input("Type", key="we_type_new")
+            we_title = st.text_input("Title", key="we_title_new")
+            we_content = st.text_area("Notes", height=140, key="we_content_new")
+            if st.form_submit_button("Save element"):
                 try:
                     create_world_element(current_project_id, {"type": we_type, "title": we_title, "content": we_content})
-                    st.success("已创建世界观条目")
+                    st.success("World element saved.")
                 except Exception as exc:  # noqa: BLE001
-                    st.error(f"创建失败: {exc}")
+                    st.error(f"Save failed: {exc}")
 
     with col_ai:
-        st.markdown("#### AI 世界观助手")
-        prompt = st.text_area("提示", value="根据世界观生成 10 个地名", height=120)
-        if st.button("生成建议"):
+        st.markdown("#### AI world helper")
+        prompt = st.text_area("Prompt", value="Generate three tensions for the ruling faction.", height=120)
+        if st.button("Generate world beats"):
             try:
                 result = ai_generate(prompt, mode="world")
                 st.session_state["world_ai"] = result
             except Exception as exc:  # noqa: BLE001
-                st.error(f"生成失败: {exc}")
+                st.error(f"AI generation failed: {exc}")
         if st.session_state.get("world_ai"):
             st.info(st.session_state["world_ai"])
 
 
 def render_character_mode(current_project_id: int) -> None:
-    st.markdown("### 👤 角色管理")
+    st.markdown("### Character Desk")
     if not current_project_id:
-        st.info("请选择作品以管理角色")
+        st.info("Select a project to manage characters.")
         return
 
     try:
         characters = list_characters(current_project_id)
     except Exception as exc:  # noqa: BLE001
-        st.error(f"加载角色失败: {exc}")
+        st.error(f"Unable to load characters: {exc}")
         characters = []
 
     cols = st.columns(3)
     for idx, ch in enumerate(characters):
         with cols[idx % 3]:
-            st.markdown(f"**{ch.get('name')}** · {ch.get('role') or ''}")
+            st.markdown(f"**{ch.get('name', 'Unknown')}** - {ch.get('role') or ''}")
             st.caption(ch.get("description") or "")
-            st.caption(f"状态：{ch.get('arc') or '未设置'}")
+            arc = ch.get("arc") or "Arc not set"
+            st.caption(f"Arc: {arc}")
 
     st.markdown("---")
-    st.markdown("#### 编辑 / 新建角色")
+    st.markdown("#### Create / update character")
     with st.form("character_edit_form"):
-        ch_name = st.text_input("姓名")
-        ch_role = st.text_input("角色定位")
-        ch_desc = st.text_area("设定", height=120)
-        ch_arc = st.text_area("成长路线", height=80)
-        if st.form_submit_button("保存角色"):
+        ch_name = st.text_input("Name")
+        ch_role = st.text_input("Role")
+        ch_desc = st.text_area("Snapshot", height=110)
+        ch_arc = st.text_area("Arc notes", height=80)
+        if st.form_submit_button("Save character"):
             try:
                 create_character(current_project_id, {"name": ch_name, "role": ch_role, "description": ch_desc, "arc": ch_arc})
-                st.success("角色已保存")
+                st.success("Character saved.")
             except Exception as exc:  # noqa: BLE001
-                st.error(f"保存失败: {exc}")
+                st.error(f"Save failed: {exc}")
 
-    st.markdown("#### AI 人物检测")
-    ai_prompt = st.text_area("提示", value="检查此角色是否人格不一致", height=80)
-    if st.button("运行检测"):
+    st.markdown("#### Consistency check")
+    ai_prompt = st.text_area("Prompt", value="Check if the protagonist voice drifts across chapters.", height=80)
+    if st.button("Run character check"):
         try:
             result = ai_generate(ai_prompt, mode="character_check")
             st.session_state["character_ai"] = result
         except Exception as exc:  # noqa: BLE001
-            st.error(f"AI 失败: {exc}")
+            st.error(f"AI failed: {exc}")
     if st.session_state.get("character_ai"):
         st.info(st.session_state["character_ai"])
 
 
 def render_outline_mode(current_project_id: int, chapter_list: List[Dict[str, Any]]) -> None:
-    st.markdown("### 📜 大纲视图")
+    st.markdown("### Outline Board")
     if not current_project_id:
-        st.info("请选择作品以查看大纲")
+        st.info("Select a project to view the outline.")
         return
 
     col_tree, col_detail, col_ai = st.columns([1.2, 1.8, 1.2], gap="large")
     with col_tree:
-        st.markdown("#### 卷/篇/章")
+        st.markdown("#### Volumes / chapters")
         if chapter_list:
             for c in chapter_list:
-                st.write(f"- 第 {c['index'] + 1} 章 · {c['title']} ({'已完成' if c.get('content') else '草稿'})")
+                status = "Draft" if c.get("content") else "Pending"
+                st.write(f"- {c.get('index', 0) + 1}. {c['title']} - {status}")
         else:
-            st.caption("暂无章节")
+            st.caption("No chapters yet.")
 
     with col_detail:
-        st.markdown("#### 大纲详情")
-        st.text_area("本卷目标 / 冲突结构", height=180, key="outline_detail")
+        st.markdown("#### Outline detail")
+        st.text_area("Outline focus", height=180, key="outline_detail")
 
     with col_ai:
-        st.markdown("#### AI 排序建议")
-        prompt = st.text_area("提示", value="帮我重排最近几章的顺序以增强节奏", height=120)
-        if st.button("生成大纲建议"):
+        st.markdown("#### AI outline planner")
+        prompt = st.text_area(
+            "Prompt",
+            value="Draft a beat map for the next chapter that escalates the rivalry and ends on a hook.",
+            height=120,
+        )
+        if st.button("Generate outline ideas"):
             try:
                 suggestion = ai_generate(prompt, mode="outline")
                 st.session_state["outline_ai"] = suggestion
             except Exception as exc:  # noqa: BLE001
-                st.error(f"生成失败: {exc}")
+                st.error(f"AI failed: {exc}")
         if st.session_state.get("outline_ai"):
             st.info(st.session_state["outline_ai"])
 
 
 def render_quality_mode(current_project_id: int, chapter_id: Optional[int]) -> None:
-    st.markdown("### 🧪 质量检查模式")
+    st.markdown("### Quality Check")
     if not current_project_id or not chapter_id:
-        st.info("请选择作品与章节后运行质量检查")
+        st.info("Pick a project and chapter to run quality checks.")
         return
 
-    if st.button("生成质量报告"):
+    if st.button("Generate quality report"):
         try:
             result = analyze_chapter_api(chapter_id)
             st.session_state["quality_report"] = result
         except Exception as exc:  # noqa: BLE001
-            st.error(f"质量分析失败: {exc}")
+            st.error(f"Report failed: {exc}")
 
     if st.session_state.get("quality_report"):
         st.json(st.session_state["quality_report"])
     else:
-        st.caption("将生成角色 OOC、世界观冲突、重复桥段、节奏分析等报告。")
+        st.caption("Quality report highlights OOC lines, world clashes, repeats, and pacing.")
 
 
 # ---------------- Main -----------------
 
 
 def main() -> None:
-    st.title("AI 写作器")
-    st.caption("左侧工程树快速导航，右侧是核心工作台。")
+    inject_base_styles()
+    st.title("AI Writing Command Center")
+    st.caption("Three-panel Chapter Studio with world, character, outline, and quality views.")
 
     ui_state = render_top_bar()
 
     # Sidebar: project creation
-    st.sidebar.subheader("新建作品")
+    st.sidebar.subheader("Create project")
     with st.sidebar.form("new_project_form"):
-        proj_name = st.text_input("作品名称")
-        proj_desc = st.text_area("简介", height=80)
-        if st.form_submit_button("创建作品"):
+        proj_name = st.text_input("Project name")
+        proj_desc = st.text_area("Description", height=80)
+        if st.form_submit_button("Create project"):
             try:
                 proj = create_project(proj_name, proj_desc)
                 st.session_state["selected_project_id"] = proj["id"]
-                st.sidebar.success("作品已创建")
+                st.sidebar.success("Project created.")
             except Exception as exc:  # noqa: BLE001
-                st.sidebar.error(f"创建失败: {exc}")
+                st.sidebar.error(f"Create failed: {exc}")
 
     # Load projects and chapters
     try:
         projects = load_projects()
     except Exception as exc:  # noqa: BLE001
-        st.error(f"加载作品失败: {exc}")
+        st.error(f"Unable to load projects: {exc}")
         projects = []
 
     current_project_id = render_project_switcher(projects)
@@ -604,7 +676,7 @@ def main() -> None:
             chapter_list = load_chapters(current_project_id)
             st.session_state["chapter_list_for_tabs"] = chapter_list
         except Exception as exc:  # noqa: BLE001
-            st.error(f"加载章节失败: {exc}")
+            st.error(f"Unable to load chapters: {exc}")
             chapter_list = []
 
     render_project_tree_sidebar(projects, chapter_list)
@@ -612,27 +684,27 @@ def main() -> None:
     st.markdown("---")
 
     if current_project_id:
-        with st.expander("快速新建章节", expanded=False):
+        with st.expander("Add a new chapter", expanded=False):
             with st.form("new_chapter_form"):
-                new_chapter_title = st.text_input("章节标题")
-                new_chapter_summary = st.text_area("章节摘要", height=80)
-                if st.form_submit_button("创建章节"):
+                new_chapter_title = st.text_input("Chapter title")
+                new_chapter_summary = st.text_area("Summary", height=80)
+                if st.form_submit_button("Create chapter"):
                     try:
                         chap = create_chapter(current_project_id, new_chapter_title, new_chapter_summary)
                         st.session_state["selected_chapter_id"] = chap["id"]
-                        st.success("章节已创建")
+                        st.success("Chapter created.")
                     except Exception as exc:  # noqa: BLE001
-                        st.error(f"创建失败: {exc}")
+                        st.error(f"Create failed: {exc}")
 
     current_chapter_id = st.session_state.get("selected_chapter_id")
 
-    if ui_state["mode"] == "写作模式":
+    if ui_state["mode"] == "writing":
         render_writing_mode(current_project_id, current_chapter_id)
-    elif ui_state["mode"] == "世界观模式":
+    elif ui_state["mode"] == "world":
         render_world_mode(current_project_id)
-    elif ui_state["mode"] == "角色模式":
+    elif ui_state["mode"] == "characters":
         render_character_mode(current_project_id)
-    elif ui_state["mode"] == "大纲模式":
+    elif ui_state["mode"] == "outline":
         render_outline_mode(current_project_id, chapter_list)
     else:
         render_quality_mode(current_project_id, current_chapter_id)
