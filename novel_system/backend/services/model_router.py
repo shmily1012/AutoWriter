@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
-from novel_system.backend.services import openai_client
+from novel_system.backend.services import gemini_client, openai_client, xai_client
 
 
 @dataclass(frozen=True)
@@ -26,7 +26,7 @@ MODEL_REGISTRY: Dict[str, ModelSpec] = {
         name="gpt-5.1",
         provider="openai",
         tier="strong",
-        roles=("default", "draft", "rewrite", "quality", "outline"),
+        roles=("default", "draft", "rewrite", "quality", "outline", "chapter"),
         max_context=196_000,
         price={"in": 1.25, "out": 10.0},
     ),
@@ -34,7 +34,7 @@ MODEL_REGISTRY: Dict[str, ModelSpec] = {
         name="gpt-5-mini",
         provider="openai",
         tier="cheap",
-        roles=("short", "classify", "tag", "outline"),
+        roles=("short", "classify", "tag", "outline", "blurb"),
         max_context=128_000,
         price={"in": 0.25, "out": 2.0},
     ),
@@ -72,35 +72,37 @@ MODEL_REGISTRY: Dict[str, ModelSpec] = {
         max_context=512_000,
         price=None,
     ),
-    # Claude placeholder (if later added)
-    "claude-4.5": ModelSpec(
-        name="claude-4.5",
-        provider="anthropic",
-        tier="style",
-        roles=("rewrite", "style", "long"),
-        max_context=200_000,
-        price={"in": 3.0, "out": 15.0},
-    ),
 }
 
-# Task → default preference order
+# Task → default preference order (novel-focused)
 TASK_DEFAULTS: Dict[str, List[str]] = {
-    "outline": ["gpt-5-mini", "gpt-5.1"],
-    "draft": ["gpt-5.1", "gemini-3.0-pro", "grok-4.1"],
-    "rewrite": ["gpt-5.1", "claude-4.5", "grok-4.1"],
-    "polish": ["claude-4.5", "gpt-5.1"],
+    # Fast, cheap scaffolding
+    "outline": ["gpt-5-mini", "gpt-5.1", "gemini-3.0-pro"],
+    "short": ["gpt-5-mini", "gemini-1.5-flash", "gpt-5.1"],
+    # Chapter/scene generation
+    "draft": ["gpt-5-mini", "gpt-5.1", "gemini-3.0-pro"],
+    "chapter": ["gpt-5.1", "gemini-3.0-pro"],
+    # Revision and quality
+    "rewrite": ["gpt-5.1", "grok-4.1"],
+    "polish": ["gpt-5.1", "grok-4.1"],
     "quality": ["gpt-5.1", "gemini-3.0-pro"],
-    "world": ["gpt-5.1", "grok-4.1"],
-    "short": ["gpt-5-mini", "gemini-1.5-flash"],
-    "chat": ["gpt-5.1", "grok-4.1"],
+    # Worldbuilding and long-context reasoning
+    "world": ["gemini-3.0-pro", "gpt-5.1"],
+    "lore": ["gemini-3.0-pro", "gpt-5.1"],
+    # Dialogue and emotion-heavy passages
+    "dialogue": ["grok-4.1", "gpt-5.1"],
+    "emotional": ["grok-4.1", "gpt-5.1"],
+    # General chat fallback
+    "chat": ["gpt-5-mini", "gpt-5.1", "grok-4.1"],
 }
 
 # Strategy presets (user/session preferences)
 STRATEGY_PRESETS: Dict[str, List[str]] = {
-    "default": ["gpt-5.1", "gpt-5-mini"],
-    "claude": ["claude-4.5", "gpt-5.1"],
+    "default": ["gpt-5-mini", "gpt-5.1"],
+    "creative": ["grok-4.1", "gpt-5.1"],
     "grok": ["grok-4.1", "gpt-5.1"],
-    "gemini": ["gemini-3.0-pro", "gpt-5.1"],
+    "gemini": ["gemini-3.0-pro", "gpt-5.1", "gpt-5-mini"],
+    "long_context": ["gemini-3.0-pro", "gpt-5.1"],
     "cheap": ["gpt-5-mini", "gemini-1.5-flash", "gpt-5.1"],
 }
 
@@ -165,6 +167,36 @@ def invoke_model(
             "from_fallback": False,
         }
 
+    if spec.provider == "gemini":
+        text = gemini_client.generate_text(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            model=spec.name,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return {
+            "text": text,
+            "model_used": spec.name,
+            "provider": spec.provider,
+            "from_fallback": False,
+        }
+
+    if spec.provider == "grok":
+        text = xai_client.generate_text(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            model=spec.name,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return {
+            "text": text,
+            "model_used": spec.name,
+            "provider": spec.provider,
+            "from_fallback": False,
+        }
+
     raise ModelUnavailable(f"Provider '{spec.provider}' not implemented yet for model '{spec.name}'")
 
 
@@ -187,8 +219,8 @@ def generate_text(
     """
     Route a generation request through the model registry.
 
-    - task: logical task label (outline/draft/rewrite/polish/quality/chat/short/world)
-    - strategy: user/session preference (default/claude/grok/gemini/cheap)
+    - task: logical task label (outline/draft/chapter/rewrite/polish/quality/chat/short/world/dialogue)
+    - strategy: user/session preference (default/creative/grok/gemini/long_context/cheap)
     - preferred_models: explicit priority list; overrides strategy/task defaults
     - compare_models: if provided, run multiple models and return list of results
     - allow_fallback: if True, try next model on failure

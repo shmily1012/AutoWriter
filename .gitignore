@@ -7,3 +7,4 @@ novel_system/novel_system/docker-data/*
 # environment variables
 .env
 
+.venv/
