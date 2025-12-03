@@ -44,6 +44,24 @@ def inject_base_styles() -> None:
             border: 1px solid var(--border);
             border-radius: 12px;
         }
+        .status-bar {
+            padding: 0.65rem 0.9rem;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            background: linear-gradient(120deg, rgba(124,140,255,0.14), rgba(116,212,255,0.08));
+            font-size: 0.95rem;
+            margin-bottom: 0.6rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #7c8cff;
+            box-shadow: 0 0 0 6px rgba(124,140,255,0.2);
+        }
         .step-list { padding-left: 1.2rem; line-height: 1.6; }
         .step-list li { margin-bottom: 0.4rem; }
         .mono { font-family: 'IBM Plex Mono', monospace; }

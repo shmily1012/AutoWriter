@@ -14,6 +14,20 @@ def init_state() -> None:
     st.session_state.setdefault("selected_project_id", None)
     st.session_state.setdefault("selected_chapter_id", None)
     st.session_state.setdefault("language", "en")
+    st.session_state.setdefault("action_status", None)
+
+
+def render_status_bar(i18n: I18n) -> None:
+    status = st.session_state.get("action_status") or i18n.t("status_idle")
+    st.markdown(
+        f"""
+        <div class="status-bar">
+            <span class="status-dot"></span>
+            <div><strong>{i18n.t('status_label')}:</strong> {status}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_top_bar(
@@ -122,6 +136,7 @@ def main() -> None:
     with top_cols[0]:
         st.title(i18n.t("app_title"))
         st.caption(i18n.t("app_subtitle"))
+        render_status_bar(i18n)
 
     render_sidebar_create_project(i18n)
 

@@ -8,6 +8,14 @@ from .i18n import I18n
 AIProfile = Dict[str, Optional[str]]
 
 
+def _set_status(i18n: I18n, action_label: str) -> None:
+    st.session_state["action_status"] = i18n.t("status_working", action=action_label)
+
+
+def _clear_status() -> None:
+    st.session_state["action_status"] = None
+
+
 def _word_progress(content: str, expected: int = 2000, *, i18n: I18n) -> None:
     words = len((content or "").split())
     pct = min(words / expected, 1.2) if expected else 0
@@ -71,6 +79,7 @@ def render_plan_stage(
                 key=f"plan_target_{project_id}",
             )
             if st.button(i18n.t("send_to_draft"), key=f"plan_send_{project_id}"):
+                _set_status(i18n, i18n.t("send_to_draft"))
                 try:
                     chapter = api.load_chapter(options[target_label])
                     summary_text = st.session_state.get(outline_key, "")
@@ -83,6 +92,8 @@ def render_plan_stage(
                     st.success(i18n.t("summary_sent_success"))
                 except Exception as exc:  # noqa: BLE001
                     st.error(i18n.t("send_failed", error=exc))
+                finally:
+                    _clear_status()
         else:
             st.caption(i18n.t("no_chapters_plan_below"))
 
@@ -91,11 +102,14 @@ def render_plan_stage(
             new_title = st.text_input(i18n.t("new_chapter_title"))
             new_summary = st.text_area(i18n.t("short_summary"), height=80)
             if st.form_submit_button(i18n.t("create_chapter_button")):
+                _set_status(i18n, i18n.t("create_chapter_button"))
                 try:
                     api.create_chapter(project_id, new_title, new_summary)
                     st.success(i18n.t("chapter_created_prompt"))
                 except Exception as exc:  # noqa: BLE001
                     st.error(i18n.t("create_failed", error=exc))
+                finally:
+                    _clear_status()
 
     with col_ai:
         st.markdown(f"#### {i18n.t('ai_outline_coach')}")
@@ -111,6 +125,7 @@ def render_plan_stage(
         )
         replace_outline = st.checkbox(i18n.t("replace_outline_checkbox"), key=f"plan_replace_{project_id}", value=False)
         if st.button(i18n.t("propose_beats_button"), key=f"plan_ai_{project_id}"):
+            _set_status(i18n, i18n.t("propose_beats_button"))
             try:
                 suggestion = api.ai_generate(
                     st.session_state[prompt_key],
@@ -125,6 +140,8 @@ def render_plan_stage(
                 st.success(i18n.t("outline_updated"))
             except Exception as exc:  # noqa: BLE001
                 st.error(i18n.t("ai_failed", error=exc))
+            finally:
+                _clear_status()
 
 
 def render_draft_stage(
@@ -205,6 +222,7 @@ def render_draft_stage(
         save_cols = st.columns(2)
         with save_cols[0]:
             if st.button(i18n.t("save_chapter_button"), key=f"save_{chapter_id}"):
+                _set_status(i18n, i18n.t("save_chapter_button"))
                 try:
                     api.save_chapter(
                         chapter_id,
@@ -215,14 +233,19 @@ def render_draft_stage(
                     st.success(i18n.t("chapter_saved"))
                 except Exception as exc:  # noqa: BLE001
                     st.error(i18n.t("save_failed", error=exc))
+                finally:
+                    _clear_status()
         with save_cols[1]:
             if st.button(i18n.t("run_diagnostics_button"), key=f"diag_{chapter_id}"):
+                _set_status(i18n, i18n.t("run_diagnostics_button"))
                 try:
                     analysis = api.analyze_chapter_api(chapter_id)
                     st.session_state[f"analysis_{chapter_id}"] = analysis
                     st.success(i18n.t("analysis_ready"))
                 except Exception as exc:  # noqa: BLE001
                     st.error(i18n.t("diagnostics_failed", error=exc))
+                finally:
+                    _clear_status()
 
     with col_ai:
         st.markdown(f"#### {i18n.t('writer_loop')}")
@@ -241,6 +264,7 @@ def render_draft_stage(
 
         def run_ai(action: str, label_key: str) -> None:
             label_text = i18n.t(label_key)
+            _set_status(i18n, label_text)
             try:
                 generated = api.chapter_ai_action(
                     chapter_id,
@@ -259,6 +283,8 @@ def render_draft_stage(
                 status_placeholder.success(i18n.t("ai_action_success", label=label_text))
             except Exception as exc:  # noqa: BLE001
                 status_placeholder.error(i18n.t("ai_action_failed", label=label_text, error=exc))
+            finally:
+                _clear_status()
 
         col1, col2 = st.columns(2)
         with col1:
@@ -307,11 +333,14 @@ def render_revise_stage(
     with col_checks:
         st.markdown(f"#### {i18n.t('quality_checks')}")
         if st.button(i18n.t("run_quality_report"), key=f"revise_diag_{chapter_id}"):
+            _set_status(i18n, i18n.t("run_quality_report"))
             try:
                 analysis = api.analyze_chapter_api(chapter_id)
                 st.session_state[f"analysis_{chapter_id}"] = analysis
             except Exception as exc:  # noqa: BLE001
                 st.error(i18n.t("report_failed", error=exc))
+            finally:
+                _clear_status()
         analysis_data = st.session_state.get(f"analysis_{chapter_id}")
         if analysis_data:
             issues = analysis_data.get("issues") if isinstance(analysis_data, dict) else None
@@ -337,6 +366,7 @@ def render_revise_stage(
             key=f"revise_instruction_{chapter_id}",
         )
         if st.button(i18n.t("rewrite_selection"), key=f"revise_rewrite_{chapter_id}"):
+            _set_status(i18n, i18n.t("rewrite_selection"))
             try:
                 prompt = f"{instruction}\n\n---\n{snippet}"
                 result = api.chapter_ai_action(
@@ -351,6 +381,8 @@ def render_revise_stage(
                 st.success(i18n.t("rewrite_added_history"))
             except Exception as exc:  # noqa: BLE001
                 st.error(i18n.t("rewrite_failed", error=exc))
+            finally:
+                _clear_status()
 
         st.markdown(f"#### {i18n.t('targeted_polish')}")
         polish_prompt = st.text_area(
@@ -360,6 +392,7 @@ def render_revise_stage(
             key=f"revise_polish_prompt_{chapter_id}",
         )
         if st.button(i18n.t("polish_passage"), key=f"revise_polish_{chapter_id}"):
+            _set_status(i18n, i18n.t("polish_passage"))
             try:
                 result = api.ai_generate(
                     polish_prompt,
@@ -372,6 +405,8 @@ def render_revise_stage(
                 st.success(i18n.t("polish_added_history"))
             except Exception as exc:  # noqa: BLE001
                 st.error(i18n.t("polish_failed", error=exc))
+            finally:
+                _clear_status()
 
 
 def render_library_stage(
