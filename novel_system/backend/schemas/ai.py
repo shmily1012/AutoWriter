@@ -8,6 +8,9 @@ class AIGenerateRequest(BaseModel):
     mode: Optional[str] = Field(
         default=None, description="Optional mode hint (outline/expand/rewrite/etc.)"
     )
+    role: Optional[str] = Field(default=None, description="Optional role key for system prompt selection")
+    persona: Optional[str] = Field(default=None, description="Optional author persona or voice preference")
+    tone: Optional[str] = Field(default=None, description="Optional tone guidance (e.g., darker, lighter, balanced)")
     system_prompt: Optional[str] = Field(
         default=None, description="Override system prompt; default is a writing assistant"
     )

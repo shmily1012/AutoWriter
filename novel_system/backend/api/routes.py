@@ -51,6 +51,16 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
     return project
 
 
+@router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_project(project_id: int, db: Session = Depends(get_db)):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    db.delete(project)
+    db.commit()
+    return None
+
+
 @router.get("/projects", response_model=list[ProjectListItem])
 def list_projects(db: Session = Depends(get_db)):
     return db.query(Project).order_by(Project.id.desc()).all()
@@ -121,6 +131,20 @@ def get_chapter(chapter_id: int, db: Session = Depends(get_db)):
     if not chapter:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chapter not found")
     return chapter
+
+
+@router.delete("/chapters/{chapter_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_chapter(chapter_id: int, db: Session = Depends(get_db)):
+    chapter = db.get(Chapter, chapter_id)
+    if not chapter:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chapter not found")
+    try:
+        upsert_embedding(project_id=chapter.project_id, ref_type="chapter", ref_id=chapter.id, content="")
+    except Exception:
+        pass
+    db.delete(chapter)
+    db.commit()
+    return None
 
 
 @router.put("/chapters/{chapter_id}", response_model=ChapterRead)
@@ -239,6 +263,20 @@ def update_world_element(element_id: int, payload: WorldElementUpdate, db: Sessi
     return we
 
 
+@router.delete("/world-elements/{element_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_world_element(element_id: int, db: Session = Depends(get_db)):
+    we = db.get(WorldElement, element_id)
+    if not we:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="World element not found")
+    try:
+        upsert_embedding(project_id=we.project_id, ref_type="world", ref_id=we.id, content="")
+    except Exception:
+        pass
+    db.delete(we)
+    db.commit()
+    return None
+
+
 @router.post(
     "/projects/{project_id}/characters",
     response_model=CharacterRead,
@@ -318,22 +356,46 @@ def update_character(character_id: int, payload: CharacterUpdate, db: Session = 
     return ch
 
 
+@router.delete("/characters/{character_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_character(character_id: int, db: Session = Depends(get_db)):
+    ch = db.get(Character, character_id)
+    if not ch:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Character not found")
+    try:
+        upsert_embedding(project_id=ch.project_id, ref_type="character", ref_id=ch.id, content="")
+    except Exception:
+        pass
+    db.delete(ch)
+    db.commit()
+    return None
+
+
 @router.post("/characters/{character_id}/ai/improve", response_model=AIGenerateResponse)
 def ai_improve_character(character_id: int, payload: AIGenerateRequest, db: Session = Depends(get_db)):
     ch = db.get(Character, character_id)
     if not ch:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Character not found")
     base = (
-        f"角色名：{ch.name}\n角色定位：{ch.role or ''}\n设定：{ch.description or ''}\n弧线：{ch.arc or ''}\n"
+        f"Character: {ch.name}\nRole: {ch.role or ''}\nSnapshot: {ch.description or ''}\nArc: {ch.arc or ''}\n"
     )
-    prompt = f"{base}\n\n用户需求：{payload.prompt}"
+    prompt = f"{base}\n\nUser request: {payload.prompt}"
+    system_prompt = payload.system_prompt
+    persona_tone = []
+    if payload.persona:
+        persona_tone.append(f"Author persona: {payload.persona}.")
+    if payload.tone:
+        persona_tone.append(f"Tone: {payload.tone}.")
+    if persona_tone:
+        system_prompt = f"{system_prompt or ''} {' '.join(persona_tone)}".strip()
+
     text = generate_text(
         prompt=prompt,
         mode=payload.mode or "character_improve",
-        system_prompt=payload.system_prompt,
+        system_prompt=system_prompt,
         model=payload.model,
         temperature=payload.temperature,
         max_tokens=payload.max_tokens,
+        role=payload.role,
     )
     return AIGenerateResponse(generated_text=text)
 
@@ -394,6 +456,16 @@ def update_clue(clue_id: int, payload: ClueUpdate, db: Session = Depends(get_db)
     return clue
 
 
+@router.delete("/clues/{clue_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_clue(clue_id: int, db: Session = Depends(get_db)):
+    clue = db.get(Clue, clue_id)
+    if not clue:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Clue not found")
+    db.delete(clue)
+    db.commit()
+    return None
+
+
 def _chapter_ai_action(
     chapter_id: int,
     mode: str,
@@ -409,14 +481,24 @@ def _chapter_ai_action(
     if chapter.content:
         base_prompt = f"Existing content:\n{chapter.content}\n\nUser prompt:\n{base_prompt}"
 
+    system_prompt = payload.system_prompt
+    persona_tone = []
+    if payload.persona:
+        persona_tone.append(f"Author persona: {payload.persona}.")
+    if payload.tone:
+        persona_tone.append(f"Tone: {payload.tone}.")
+    if persona_tone:
+        system_prompt = f"{system_prompt or ''} {' '.join(persona_tone)}".strip()
+
     try:
         text = generate_text(
             prompt=base_prompt,
             mode=mode,
-            system_prompt=payload.system_prompt,
+            system_prompt=system_prompt,
             model=payload.model,
             temperature=payload.temperature,
             max_tokens=payload.max_tokens,
+            role=payload.role,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -427,7 +509,24 @@ def _chapter_ai_action(
 
 @router.post("/ai/search", response_model=list[dict])
 def ai_search(project_id: int, query: str, top_k: int = 5):
-    return search_related_text(project_id=project_id, query=query, top_k=top_k)
+    raw = search_related_text(project_id=project_id, query=query, top_k=top_k)
+    formatted = []
+    for item in raw:
+        content = item.get("content") or ""
+        ref_type = item.get("type") or "note"
+        ref_id = item.get("ref_id")
+        title = f"{ref_type.title()} #{ref_id}" if ref_id is not None else ref_type.title()
+        formatted.append(
+            {
+                "title": title,
+                "snippet": content[:200],
+                "content": content,
+                "type": ref_type,
+                "ref_id": ref_id,
+                "score": item.get("score"),
+            }
+        )
+    return formatted
 
 
 @router.post("/chapters/{chapter_id}/ai/expand", response_model=AIGenerateResponse)
@@ -445,21 +544,26 @@ def ai_draft(chapter_id: int, payload: AIGenerateRequest, db: Session = Depends(
     return _chapter_ai_action(chapter_id, mode="draft", payload=payload, db=db)
 
 
+@router.post("/chapters/{chapter_id}/ai/polish", response_model=AIGenerateResponse)
+def ai_polish(chapter_id: int, payload: AIGenerateRequest, db: Session = Depends(get_db)):
+    return _chapter_ai_action(chapter_id, mode="polish", payload=payload, db=db)
+
+
 def analyze_chapter_content(chapter: Chapter, project: Project, db: Session) -> dict:
     # Prepare context
     chars = db.query(Character).filter(Character.project_id == project.id).all()
     worlds = db.query(WorldElement).filter(WorldElement.project_id == project.id).all()
     char_brief = [
-        f"{c.name}（{c.role or '未知角色'}）：{(c.description or '')[:80]}"
+        f"{c.name} ({c.role or 'role unknown'}): {(c.description or '')[:80]}"
         for c in chars
     ]
     world_brief = [
-        f"{w.type or '设定'} - {w.title}：{(w.content or '')[:80]}"
+        f"{w.type or 'world'} - {w.title}: {(w.content or '')[:80]}"
         for w in worlds
     ]
     prompt = CHAPTER_ANALYSIS_PROMPT.format(
-        character_brief="\n".join(char_brief) or "无",
-        world_brief="\n".join(world_brief) or "无",
+        character_brief="\n".join(char_brief) or "None",
+        world_brief="\n".join(world_brief) or "None",
         chapter_content=chapter.content,
     )
     text = generate_text(
@@ -588,14 +692,24 @@ def parse_json_response(text: str) -> dict:
 
 @router.post("/ai/generate", response_model=AIGenerateResponse)
 def ai_generate(payload: AIGenerateRequest):
+    system_prompt = payload.system_prompt
+    persona_tone = []
+    if payload.persona:
+        persona_tone.append(f"Author persona: {payload.persona}.")
+    if payload.tone:
+        persona_tone.append(f"Tone: {payload.tone}.")
+    if persona_tone:
+        system_prompt = f"{system_prompt or ''} {' '.join(persona_tone)}".strip()
+
     try:
         text = generate_text(
             prompt=payload.prompt,
             mode=payload.mode,
-            system_prompt=payload.system_prompt,
+            system_prompt=system_prompt,
             model=payload.model,
             temperature=payload.temperature,
             max_tokens=payload.max_tokens,
+            role=payload.role,
         )
     except ValueError as exc:
         raise HTTPException(

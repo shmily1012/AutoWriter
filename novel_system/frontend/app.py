@@ -121,10 +121,25 @@ def create_chapter(project_id: int, title: str, summary: str) -> Dict[str, Any]:
     return resp.json()
 
 
-def chapter_ai_action(chapter_id: int, action: str, prompt: str) -> str:
+def chapter_ai_action(
+    chapter_id: int,
+    action: str,
+    prompt: str,
+    *,
+    model: Optional[str] = None,
+    persona: Optional[str] = None,
+    tone: Optional[str] = None,
+) -> str:
+    payload: Dict[str, Any] = {"prompt": prompt}
+    if model:
+        payload["model"] = model
+    if persona:
+        payload["persona"] = persona
+    if tone:
+        payload["tone"] = tone
     resp = api_post(
         f"/chapters/{chapter_id}/ai/{action}",
-        {"prompt": prompt},
+        payload,
     )
     resp.raise_for_status()
     return resp.json().get("generated_text", "")
@@ -172,8 +187,22 @@ def update_character(character_id: int, payload: Dict[str, Any]) -> Dict[str, An
     return resp.json()
 
 
-def ai_improve_character(character_id: int, prompt: str) -> str:
-    resp = api_post(f"/characters/{character_id}/ai/improve", {"prompt": prompt})
+def ai_improve_character(
+    character_id: int,
+    prompt: str,
+    *,
+    model: Optional[str] = None,
+    persona: Optional[str] = None,
+    tone: Optional[str] = None,
+) -> str:
+    payload: Dict[str, Any] = {"prompt": prompt}
+    if model:
+        payload["model"] = model
+    if persona:
+        payload["persona"] = persona
+    if tone:
+        payload["tone"] = tone
+    resp = api_post(f"/characters/{character_id}/ai/improve", payload)
     resp.raise_for_status()
     return resp.json().get("generated_text", "")
 
@@ -204,10 +233,26 @@ def update_clue(clue_id: int, payload: Dict[str, Any]) -> Dict[str, Any]:
     return resp.json()
 
 
-def ai_generate(prompt: str, mode: Optional[str] = None) -> str:
+def ai_generate(
+    prompt: str,
+    mode: Optional[str] = None,
+    *,
+    model: Optional[str] = None,
+    persona: Optional[str] = None,
+    tone: Optional[str] = None,
+    role: Optional[str] = None,
+) -> str:
     payload: Dict[str, Any] = {"prompt": prompt}
     if mode:
         payload["mode"] = mode
+    if model:
+        payload["model"] = model
+    if persona:
+        payload["persona"] = persona
+    if tone:
+        payload["tone"] = tone
+    if role:
+        payload["role"] = role
     resp = api_post("/ai/generate", payload)
     resp.raise_for_status()
     return resp.json().get("generated_text", "")
@@ -346,12 +391,21 @@ def render_context_panel(current_project_id: int, chapter_data: Dict[str, Any]) 
         try:
             hits = search_related(current_project_id, query)
             for hit in hits:
-                st.write(f"- {hit.get('title', 'Note')}: {hit.get('snippet', '')[:120]}")
+                title = hit.get("title") or f"{hit.get('type', 'Note')} #{hit.get('ref_id')}"
+                snippet = hit.get("snippet") or hit.get("content", "")
+                st.write(f"- {title}: {snippet[:140]}")
         except Exception as exc:  # noqa: BLE001
             st.warning(f"Search failed: {exc}")
 
 
-def render_ai_assistant(chapter_id: int, chapter_content: str) -> None:
+def render_ai_assistant(
+    chapter_id: int,
+    chapter_content: str,
+    *,
+    model: Optional[str],
+    persona: Optional[str],
+    tone: Optional[str],
+) -> None:
     st.markdown("#### AI Companion")
     loop_tab, chat_tab, diagnostics_tab, stash_tab = st.tabs(["Writer Loop", "Dialogue", "Diagnostics", "Stash"])
 
@@ -368,7 +422,14 @@ def render_ai_assistant(chapter_id: int, chapter_content: str) -> None:
 
         def run_ai(action: str, label: str) -> None:
             try:
-                generated = chapter_ai_action(chapter_id, action, prompt)
+                generated = chapter_ai_action(
+                    chapter_id,
+                    action,
+                    prompt,
+                    model=model,
+                    persona=persona,
+                    tone=tone,
+                )
                 content_key = f"chapter_content_{chapter_id}"
                 if replace:
                     st.session_state[content_key] = generated
@@ -389,6 +450,8 @@ def render_ai_assistant(chapter_id: int, chapter_content: str) -> None:
         with col3:
             if st.button("Rewrite tone"):
                 run_ai("rewrite", "Rewrite")
+        if st.button("Polish style"):
+            run_ai("polish", "Polish")
 
     with chat_tab:
         chat_prompt = st.text_area(
@@ -399,7 +462,13 @@ def render_ai_assistant(chapter_id: int, chapter_content: str) -> None:
         )
         if st.button("Send chat", key=f"chat_btn_{chapter_id}"):
             try:
-                reply = ai_generate(chat_prompt, mode="chat")
+                reply = ai_generate(
+                    chat_prompt,
+                    mode="chat",
+                    model=model,
+                    persona=persona,
+                    tone=tone,
+                )
                 st.session_state["chat_reply"] = reply
             except Exception as exc:  # noqa: BLE001
                 st.error(f"Chat failed: {exc}")
@@ -422,7 +491,14 @@ def render_ai_assistant(chapter_id: int, chapter_content: str) -> None:
         st.text_area("Scratchpad", key=f"stash_{chapter_id}", height=160)
 
 
-def render_writing_mode(current_project_id: int, chapter_id: Optional[int]) -> None:
+def render_writing_mode(
+    current_project_id: int,
+    chapter_id: Optional[int],
+    *,
+    model: Optional[str],
+    persona: Optional[str],
+    tone: Optional[str],
+) -> None:
     if not current_project_id or not chapter_id:
         st.info("Select a project and chapter to open Chapter Studio.")
         return
@@ -487,13 +563,19 @@ def render_writing_mode(current_project_id: int, chapter_id: Optional[int]) -> N
                     st.error(f"Diagnostics failed: {exc}")
 
     with col_ai:
-        render_ai_assistant(chapter_id, st.session_state.get(content_key, chapter_data.get("content") or ""))
+        render_ai_assistant(
+            chapter_id,
+            st.session_state.get(content_key, chapter_data.get("content") or ""),
+            model=model,
+            persona=persona,
+            tone=tone,
+        )
 
 
 # ---------------- Other Modes -----------------
 
 
-def render_world_mode(current_project_id: int) -> None:
+def render_world_mode(current_project_id: int, *, model: Optional[str], persona: Optional[str], tone: Optional[str]) -> None:
     st.markdown("### Worldbuilding Desk")
     if not current_project_id:
         st.info("Select a project to explore the world map.")
@@ -528,7 +610,7 @@ def render_world_mode(current_project_id: int) -> None:
         prompt = st.text_area("Prompt", value="Generate three tensions for the ruling faction.", height=120)
         if st.button("Generate world beats"):
             try:
-                result = ai_generate(prompt, mode="world")
+                result = ai_generate(prompt, mode="world", model=model, persona=persona, tone=tone, role="world_consultant")
                 st.session_state["world_ai"] = result
             except Exception as exc:  # noqa: BLE001
                 st.error(f"AI generation failed: {exc}")
@@ -536,7 +618,7 @@ def render_world_mode(current_project_id: int) -> None:
             st.info(st.session_state["world_ai"])
 
 
-def render_character_mode(current_project_id: int) -> None:
+def render_character_mode(current_project_id: int, *, model: Optional[str], persona: Optional[str], tone: Optional[str]) -> None:
     st.markdown("### Character Desk")
     if not current_project_id:
         st.info("Select a project to manage characters.")
@@ -574,15 +656,42 @@ def render_character_mode(current_project_id: int) -> None:
     ai_prompt = st.text_area("Prompt", value="Check if the protagonist voice drifts across chapters.", height=80)
     if st.button("Run character check"):
         try:
-            result = ai_generate(ai_prompt, mode="character_check")
+            result = ai_generate(ai_prompt, mode="character_check", model=model, persona=persona, tone=tone, role="world_consultant")
             st.session_state["character_ai"] = result
         except Exception as exc:  # noqa: BLE001
             st.error(f"AI failed: {exc}")
     if st.session_state.get("character_ai"):
         st.info(st.session_state["character_ai"])
 
+    st.markdown("#### AI improve selected character")
+    if characters:
+        options = {f"{c.get('name', 'Unknown')} (#{c.get('id')})": c["id"] for c in characters}
+        selected_label = st.selectbox("Character", options=list(options.keys()), key="improve_character_select")
+        improve_prompt = st.text_area(
+            "Improvement prompt",
+            value="Sharpen their voice, add a signature line, and surface one flaw.",
+            height=90,
+            key="improve_character_prompt",
+        )
+        if st.button("Improve character", key="improve_character_btn"):
+            try:
+                result = ai_improve_character(
+                    options[selected_label],
+                    improve_prompt,
+                    model=model,
+                    persona=persona,
+                    tone=tone,
+                )
+                st.session_state["character_improve_result"] = result
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"AI failed: {exc}")
+        if st.session_state.get("character_improve_result"):
+            st.info(st.session_state["character_improve_result"])
+    else:
+        st.caption("Add a character to run targeted improvements.")
 
-def render_outline_mode(current_project_id: int, chapter_list: List[Dict[str, Any]]) -> None:
+
+def render_outline_mode(current_project_id: int, chapter_list: List[Dict[str, Any]], *, model: Optional[str], persona: Optional[str], tone: Optional[str]) -> None:
     st.markdown("### Outline Board")
     if not current_project_id:
         st.info("Select a project to view the outline.")
@@ -611,7 +720,7 @@ def render_outline_mode(current_project_id: int, chapter_list: List[Dict[str, An
         )
         if st.button("Generate outline ideas"):
             try:
-                suggestion = ai_generate(prompt, mode="outline")
+                suggestion = ai_generate(prompt, mode="outline", model=model, persona=persona, tone=tone, role="plot_coach")
                 st.session_state["outline_ai"] = suggestion
             except Exception as exc:  # noqa: BLE001
                 st.error(f"AI failed: {exc}")
@@ -699,13 +808,19 @@ def main() -> None:
     current_chapter_id = st.session_state.get("selected_chapter_id")
 
     if ui_state["mode"] == "writing":
-        render_writing_mode(current_project_id, current_chapter_id)
+        render_writing_mode(
+            current_project_id,
+            current_chapter_id,
+            model=ui_state["ai_model"],
+            persona=ui_state["persona"],
+            tone=ui_state["tone"],
+        )
     elif ui_state["mode"] == "world":
-        render_world_mode(current_project_id)
+        render_world_mode(current_project_id, model=ui_state["ai_model"], persona=ui_state["persona"], tone=ui_state["tone"])
     elif ui_state["mode"] == "characters":
-        render_character_mode(current_project_id)
+        render_character_mode(current_project_id, model=ui_state["ai_model"], persona=ui_state["persona"], tone=ui_state["tone"])
     elif ui_state["mode"] == "outline":
-        render_outline_mode(current_project_id, chapter_list)
+        render_outline_mode(current_project_id, chapter_list, model=ui_state["ai_model"], persona=ui_state["persona"], tone=ui_state["tone"])
     else:
         render_quality_mode(current_project_id, current_chapter_id)
 
