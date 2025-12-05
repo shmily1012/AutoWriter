@@ -64,12 +64,17 @@ def render_plan_stage(
         return
 
     outline_key = f"plan_outline_{project_id}"
-    outline_value = st.session_state.get(outline_key, "")
+    pending_outline_key = f"{outline_key}_pending"
+    if outline_key not in st.session_state:
+        st.session_state[outline_key] = ""
+    # Apply pending updates before widgets render to avoid mutation-after-render errors.
+    if pending_outline_key in st.session_state:
+        st.session_state[outline_key] = st.session_state.pop(pending_outline_key)
 
     col_board, col_ai = st.columns([2.2, 1.1], gap="large")
     with col_board:
         st.markdown(f"#### {i18n.t('outline_board')}")
-        st.text_area(i18n.t("beats_notes"), value=outline_value, height=260, key=outline_key)
+        st.text_area(i18n.t("beats_notes"), value=st.session_state[outline_key], height=260, key=outline_key)
 
         if chapter_list:
             options = {f"{c.get('index', idx) + 1}. {c['title']} (#{c['id']})": c["id"] for idx, c in enumerate(chapter_list)}
@@ -135,9 +140,11 @@ def render_plan_stage(
                     tone=ai_profile.get("tone"),
                     role="plot_coach",
                 )
-                base = st.session_state.get(outline_key, "")
-                st.session_state[outline_key] = suggestion if replace_outline else f"{base}\n\n{suggestion}".strip()
+                base = st.session_state[outline_key]
+                new_value = suggestion if replace_outline else f"{base}\n\n{suggestion}".strip()
+                st.session_state[pending_outline_key] = new_value
                 st.success(i18n.t("outline_updated"))
+                st.rerun()
             except Exception as exc:  # noqa: BLE001
                 st.error(i18n.t("ai_failed", error=exc))
             finally:
@@ -163,8 +170,16 @@ def render_draft_stage(
         return
 
     content_key = f"chapter_content_{chapter_id}"
+    pending_content_key = f"{content_key}_pending"
     if content_key not in st.session_state:
         st.session_state[content_key] = chapter.get("content") or ""
+    if pending_content_key in st.session_state:
+        st.session_state[content_key] = st.session_state.pop(pending_content_key)
+
+    def queue_content_update(new_value: str, *, rerun: bool = True) -> None:
+        st.session_state[pending_content_key] = new_value
+        if rerun:
+            st.rerun()
 
     context_data = _fetch_context(project_id)
 
@@ -209,15 +224,15 @@ def render_draft_stage(
         quick_cols = st.columns(3)
         with quick_cols[0]:
             if st.button(i18n.t("tag_turning_point"), key=f"turn_{chapter_id}"):
-                st.session_state[content_key] = f"{content}\n\n{i18n.t('turning_point_marker')}\n"
+                queue_content_update(f"{content}\n\n{i18n.t('turning_point_marker')}\n")
         with quick_cols[1]:
             if st.button(i18n.t("insert_beat_checklist"), key=f"checklist_{chapter_id}"):
-                st.session_state[content_key] = (
+                queue_content_update(
                     f"{content}\n\n- {i18n.t('checklist_setup')}\n- {i18n.t('checklist_tension')}\n- {i18n.t('checklist_payoff')}\n"
                 )
         with quick_cols[2]:
             if st.button(i18n.t("mark_for_polish"), key=f"polish_{chapter_id}"):
-                st.session_state[content_key] = f"{content}\n\n{i18n.t('polish_marker')}\n"
+                queue_content_update(f"{content}\n\n{i18n.t('polish_marker')}\n")
 
         save_cols = st.columns(2)
         with save_cols[0]:
@@ -275,12 +290,14 @@ def render_draft_stage(
                     tone=ai_profile.get("tone"),
                 )
                 if replace:
-                    st.session_state[content_key] = generated
+                    queue_content_update(generated, rerun=False)
                 else:
                     base = st.session_state.get(content_key, "")
-                    st.session_state[content_key] = f"{base}\n\n{generated}".strip()
+                    queue_content_update(f"{base}\n\n{generated}".strip(), rerun=False)
                 _push_ai_history(chapter_id, label_text, generated)
                 status_placeholder.success(i18n.t("ai_action_success", label=label_text))
+                _clear_status()
+                st.rerun()
             except Exception as exc:  # noqa: BLE001
                 status_placeholder.error(i18n.t("ai_action_failed", label=label_text, error=exc))
             finally:
@@ -309,10 +326,10 @@ def render_draft_stage(
                     with col_ins:
                         if st.button(i18n.t("insert"), key=f"hist_ins_{chapter_id}_{idx}"):
                             base = st.session_state.get(content_key, "")
-                            st.session_state[content_key] = f"{base}\n\n{item['text']}".strip()
+                            queue_content_update(f"{base}\n\n{item['text']}".strip())
                     with col_rep:
                         if st.button(i18n.t("replace"), key=f"hist_rep_{chapter_id}_{idx}"):
-                            st.session_state[content_key] = item["text"]
+                            queue_content_update(item["text"])
         else:
             st.caption(i18n.t("history_empty"))
 

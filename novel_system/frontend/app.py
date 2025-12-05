@@ -88,17 +88,7 @@ def render_top_bar(
             st.info(i18n.t("create_project_prompt"))
 
     with col_ai:
-        ai_model_options = {
-            "GPT-5.1 (default)": "gpt-5.1",
-            "GPT-5 mini (fast/cheap)": "gpt-5-mini",
-            "GPT-4.1": "gpt-4.1",
-            "GPT-4o": "gpt-4o",
-            "GPT-4o mini (fast)": "gpt-4o-mini",
-            "Gemini 1.5 Pro": "gemini-1.5-pro",
-            "Gemini 1.5 Flash": "gemini-1.5-flash",
-        }
-        ai_model_label = st.selectbox(i18n.t("ai_model_label"), list(ai_model_options.keys()), index=0)
-        ai_model = ai_model_options[ai_model_label]
+        ai_model = st.selectbox(i18n.t("ai_model_label"), ["GPT-4.1", "Claude 3.5", "Local draft model"], index=0)
         persona = st.selectbox(
             i18n.t("author_voice_label"),
             ["Neutral", "Cinematic", "Wry narrator"],

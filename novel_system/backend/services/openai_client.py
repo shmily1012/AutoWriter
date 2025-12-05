@@ -45,12 +45,15 @@ class OpenAIService:
             {"role": "user", "content": prompt},
         ]
 
-        response = self.client.chat.completions.create(
-            model=chosen_model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        request_kwargs = {
+            "model": chosen_model,
+            "messages": messages,
+            "temperature": temperature,
+        }
+        if max_tokens is not None:
+            request_kwargs["max_tokens"] = max_tokens
+
+        response = self.client.chat.completions.create(**request_kwargs)
         return response.choices[0].message.content or ""
 
     def embed(self, texts: List[str], model: Optional[str] = None) -> List[List[float]]:
