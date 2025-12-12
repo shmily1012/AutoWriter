@@ -5,7 +5,13 @@ from novel_system.backend.schemas.chapter import (
     ChapterListItem,
     ChapterUpdate,
 )
-from novel_system.backend.schemas.ai import AIGenerateRequest, AIGenerateResponse
+from novel_system.backend.schemas.ai import (
+    AIGenerateRequest,
+    AIGenerateResponse,
+    AgentGenerateRequest,
+    AgentGenerateResponse,
+    MCPServerConfig,
+)
 from novel_system.backend.schemas.ai_outputs import ChapterAnalysisResult
 from novel_system.backend.schemas.clue import ClueCreate, ClueRead, ClueUpdate
 from novel_system.backend.schemas.character import (
@@ -29,6 +35,9 @@ __all__ = [
     "ChapterUpdate",
     "AIGenerateRequest",
     "AIGenerateResponse",
+    "AgentGenerateRequest",
+    "AgentGenerateResponse",
+    "MCPServerConfig",
     "WorldElementCreate",
     "WorldElementRead",
     "WorldElementUpdate",

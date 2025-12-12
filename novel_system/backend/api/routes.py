@@ -13,6 +13,8 @@ from novel_system.backend.models import (
 from novel_system.backend.schemas import (
     AIGenerateRequest,
     AIGenerateResponse,
+    AgentGenerateRequest,
+    AgentGenerateResponse,
     ChapterAnalysisResult,
     ClueCreate,
     ClueRead,
@@ -31,6 +33,7 @@ from novel_system.backend.schemas import (
     WorldElementRead,
     WorldElementUpdate,
 )
+from novel_system.backend.services.agents_client import generate_agentic_text
 from novel_system.backend.services import generate_text
 from novel_system.backend.services.vector_store import search_related_text, upsert_embedding
 from novel_system.backend.services.prompts import (
@@ -692,24 +695,23 @@ def parse_json_response(text: str) -> dict:
 
 @router.post("/ai/generate", response_model=AIGenerateResponse)
 def ai_generate(payload: AIGenerateRequest):
-    system_prompt = payload.system_prompt
-    persona_tone = []
-    if payload.persona:
-        persona_tone.append(f"Author persona: {payload.persona}.")
-    if payload.tone:
-        persona_tone.append(f"Tone: {payload.tone}.")
-    if persona_tone:
-        system_prompt = f"{system_prompt or ''} {' '.join(persona_tone)}".strip()
-
     try:
-        text = generate_text(
+        text = generate_agentic_text(
             prompt=payload.prompt,
-            mode=payload.mode,
-            system_prompt=system_prompt,
+            role=payload.role,
             model=payload.model,
             temperature=payload.temperature,
+            max_turns=6,
+            session_id=None,
+            use_vector_search=False,
+            default_top_k=5,
+            context_query=None,
+            system_prompt=payload.system_prompt,
+            persona=payload.persona,
+            tone=payload.tone,
+            mode=payload.mode,
             max_tokens=payload.max_tokens,
-            role=payload.role,
+            mcp_servers=payload.mcp_servers,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -717,3 +719,27 @@ def ai_generate(payload: AIGenerateRequest):
         ) from exc
 
     return AIGenerateResponse(generated_text=text)
+
+
+@router.post("/ai/agents/generate", response_model=AgentGenerateResponse)
+def ai_generate_with_agents(payload: AgentGenerateRequest):
+    try:
+        text = generate_agentic_text(
+            prompt=payload.prompt,
+            project_id=payload.project_id,
+            role=payload.role,
+            model=payload.model,
+            temperature=payload.temperature,
+            max_turns=payload.max_turns,
+            session_id=payload.session_id,
+            use_vector_search=payload.use_vector_search,
+            default_top_k=payload.default_top_k,
+            context_query=payload.context_query,
+            mcp_servers=payload.mcp_servers,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+    return AgentGenerateResponse(generated_text=text)

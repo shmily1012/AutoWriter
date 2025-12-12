@@ -16,7 +16,7 @@ class Settings(BaseSettings):
         env="REDIS_URL",
     )
     openai_api_key: str = Field(default="", env="OPENAI_API_KEY")
-    openai_model: str = Field(default="gpt-4.1", env="OPENAI_MODEL")
+    openai_model: str = Field(default="gpt-5.2", env="OPENAI_MODEL")
     openai_embedding_model: str = Field(
         default="text-embedding-3-small", env="OPENAI_EMBEDDING_MODEL"
     )
@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     xai_api_key: str = Field(default="", env="XAI_API_KEY")
     xai_base_url: str = Field(default="https://api.x.ai/v1", env="XAI_BASE_URL")
     xai_model: str = Field(default="grok-4.1", env="XAI_MODEL")
+    default_mcp_servers: Optional[str] = Field(
+        default=None,
+        env="DEFAULT_MCP_SERVERS",
+        description="JSON list of default MCP server configs; used when request omits mcp_servers",
+    )
     environment: Optional[str] = Field(default="development", env="ENVIRONMENT")
 
     class Config:

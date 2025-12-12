@@ -22,6 +22,14 @@ class ModelUnavailable(RuntimeError):
 
 MODEL_REGISTRY: Dict[str, ModelSpec] = {
     # OpenAI
+    "gpt-5.2": ModelSpec(
+        name="gpt-5.2",
+        provider="openai",
+        tier="strong",
+        roles=("default", "draft", "rewrite", "quality", "outline", "chapter"),
+        max_context=196_000,
+        price={"in": 1.5, "out": 12.0},
+    ),
     "gpt-5.1": ModelSpec(
         name="gpt-5.1",
         provider="openai",
@@ -77,33 +85,37 @@ MODEL_REGISTRY: Dict[str, ModelSpec] = {
 # Task → default preference order (novel-focused)
 TASK_DEFAULTS: Dict[str, List[str]] = {
     # Fast, cheap scaffolding
-    "outline": ["gpt-5-mini", "gpt-5.1", "gemini-3.0-pro"],
-    "short": ["gpt-5-mini", "gemini-1.5-flash", "gpt-5.1"],
+    "outline": ["gpt-5-mini", "gpt-5.2", "gemini-3.0-pro"],
+    "short": ["gpt-5-mini", "gemini-1.5-flash", "gpt-5.2"],
     # Chapter/scene generation
-    "draft": ["gpt-5-mini", "gpt-5.1", "gemini-3.0-pro"],
-    "chapter": ["gpt-5.1", "gemini-3.0-pro"],
+    "draft": ["gpt-5-mini", "gpt-5.2", "gemini-3.0-pro"],
+    "chapter": ["gpt-5.2", "gemini-3.0-pro"],
     # Revision and quality
-    "rewrite": ["gpt-5.1", "grok-4.1"],
-    "polish": ["gpt-5.1", "grok-4.1"],
-    "quality": ["gpt-5.1", "gemini-3.0-pro"],
+    "rewrite": ["gpt-5.2", "grok-4.1"],
+    "polish": ["gpt-5.2", "grok-4.1"],
+    "quality": ["gpt-5.2", "gemini-3.0-pro"],
     # Worldbuilding and long-context reasoning
-    "world": ["gemini-3.0-pro", "gpt-5.1"],
-    "lore": ["gemini-3.0-pro", "gpt-5.1"],
+    "world": ["gemini-3.0-pro", "gpt-5.2"],
+    "lore": ["gemini-3.0-pro", "gpt-5.2"],
+    # Adult/NSFW content prefers grok
+    "adult": ["grok-4.1", "gpt-5.2"],
+    "nsfw": ["grok-4.1", "gpt-5.2"],
     # Dialogue and emotion-heavy passages
-    "dialogue": ["grok-4.1", "gpt-5.1"],
-    "emotional": ["grok-4.1", "gpt-5.1"],
+    "dialogue": ["grok-4.1", "gpt-5.2"],
+    "emotional": ["grok-4.1", "gpt-5.2"],
     # General chat fallback
-    "chat": ["gpt-5-mini", "gpt-5.1", "grok-4.1"],
+    "chat": ["gpt-5-mini", "gpt-5.2", "grok-4.1"],
 }
 
 # Strategy presets (user/session preferences)
 STRATEGY_PRESETS: Dict[str, List[str]] = {
-    "default": ["gpt-5-mini", "gpt-5.1"],
-    "creative": ["grok-4.1", "gpt-5.1"],
-    "grok": ["grok-4.1", "gpt-5.1"],
-    "gemini": ["gemini-3.0-pro", "gpt-5.1", "gpt-5-mini"],
-    "long_context": ["gemini-3.0-pro", "gpt-5.1"],
-    "cheap": ["gpt-5-mini", "gemini-1.5-flash", "gpt-5.1"],
+    "default": ["gpt-5-mini", "gpt-5.2"],
+    "creative": ["grok-4.1", "gpt-5.2"],
+    "grok": ["grok-4.1", "gpt-5.2"],
+    "gemini": ["gemini-3.0-pro", "gpt-5.2", "gpt-5-mini"],
+    "long_context": ["gemini-3.0-pro", "gpt-5.2"],
+    "cheap": ["gpt-5-mini", "gemini-1.5-flash", "gpt-5.2"],
+    "adult": ["grok-4.1", "gpt-5.2", "gpt-5-mini"],
 }
 
 
