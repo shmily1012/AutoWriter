@@ -1,35 +1,28 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
-- Core CLI and service code lives in `src/autowriter` (dataclass models, file-based storage, and CLI entrypoint `autowriter`).
-- FastAPI/Streamlit scaffold sits under `novel_system`: backend API in `novel_system/backend` (settings in `core/config.py`, routers/models/services folders stubbed), frontend UI in `novel_system/frontend/app.py`, with shared config in `novel_system/config`.
-- Tests reside in `tests/` (pytest configured via `pyproject.toml`). Primary system design reference: `docs/system design.md` (read this first); other docs live in `docs/`.
-- Packaging is managed by `pyproject.toml`; dependencies and console script wiring are defined there.
+## Project Overview
+AutoWriter 是一个基于 Claude Code Skill 的多 Agent 网文创作系统。无传统后端/前端，完全通过 Claude Code 对话驱动。
 
-## Build, Test, and Development Commands
-- Install editable deps: `pip install -e .`
-- Run CLI locally (defaults to `~/.autowriter/projects` storage): `autowriter create-project "Title" "Author" --description "..."`.
-- Execute tests: `python -m pytest` (uses `tests/` and adds `src/` to `PYTHONPATH`).
-- Start backend API: `uvicorn novel_system.backend.main:app --reload --host 0.0.0.0 --port 8000` (honors `.env`).
-- Launch Streamlit UI: `streamlit run novel_system/frontend/app.py`.
+## Structure
+- `.claude/skills/write-novel/` — 主编排 Skill
+- `.claude/agents/` — 6 个 Agent 定义（architect, screenwriter, stylist, editor, reader, researcher）
+- `references/` — 模板文件（状态、人物、大纲、蓝图、剧本、审阅、反馈、风格指南）
+- `books/{书名}/` — 每本书的独立工作目录
 
-## Coding Style & Naming Conventions
-- Python 3.10+ with type hints everywhere; prefer dataclasses for domain models (see `src/autowriter/models.py`).
-- Follow PEP 8 defaults: 4-space indentation, snake_case for functions/variables, PascalCase for classes, UPPER_SNAKE_CASE for constants.
-- Keep services thin and storage pure; persist JSON via `FileStorage` to avoid side effects elsewhere.
-- No formatter is enforced in config—run `ruff`/`black` locally if desired, but keep diffs minimal and readable.
+## How It Works
+1. 用户通过 `/write-novel` 命令触发 Skill
+2. Skill 按流水线调度 Agent：架构师 → 编剧 → 文体家 → 编辑 → 读者
+3. 每步支持作者 brainstorm 互动
+4. 研究员可在任何阶段按需调用
+5. 状态通过 markdown 文件持久化
 
-## Testing Guidelines
-- Use pytest; mirror existing patterns in `tests/test_services.py` (tmp_path fixtures for filesystem work).
-- Add tests alongside new features or bug fixes; name files `test_*.py` and functions `test_*` with clear assertions.
-- For backend additions, prefer fast unit tests over integration; stub network/DB calls where possible.
+## Conventions
+- 所有状态文件使用中文
+- Agent 定义文件使用中英混合（指令英文，示例中文）
+- 章节文件命名：`chapter-001.md`, `chapter-002.md`, ...
+- 草稿命名：`chapter-{N}-{stage}.md`（blueprint/script/draft/review/feedback）
 
-## Commit & Pull Request Guidelines
-- Match existing conventional commit style (`feat: ...`, `docs: ...`, etc.) seen in `git log`.
-- PRs should include: concise summary, linked issue (if any), test results (`python -m pytest`), and CLI/API examples when behavior changes. Screenshots welcome for UI updates.
-- Keep changes focused and small; update docs and examples when altering CLI flags, storage layout, or API contracts.
-
-## Security & Configuration Tips
-- Backend reads config from `.env` (see defaults in `novel_system/backend/core/config.py`); avoid committing real secrets.
-- CLI writes user data to `~/.autowriter/projects/*.json`; back up before running destructive scripts.
-- When adding external integrations (DB, OpenAI), gate credentials via environment variables and document required values.
+## Testing
+- 使用 `/write-novel init "测试"` 初始化测试项目
+- 运行完整流水线验证各 Agent 产出格式
+- 检查状态文件更新是否正确
