@@ -52,16 +52,21 @@
 │ 读者期望规格 │      │蓝图合规   │                  ▼
 │ (TDD测试)  │──→  │审查(新增) │                 作者
 └────────────┘      └──────────┘
-    │                  ✅通过→继续
-    │                  ⚠️偏差→作者决定
-    │                  ❌偏离→回编剧
-    │
-    │                                                 │
-    │               ┌────────────────────────────────┘
+    │                  ✅通过→继续                    │
+    │                  ⚠️偏差→作者决定                 ▼
+    │                  ❌偏离→回编剧          ┌──────────────┐
+    │                                        │ Lint (自动化) │ ← Harness层
+    │                                        │ lint-chapter  │
+    │                                        └──────┬───────┘
+    │                                          🔴→回文体家(带修复指令)
+    │                                          🟡→注入编辑context
+    │                                          🟢→直接继续
+    │                                               │
+    │               ┌───────────────────────────────┘
     ▼               ▼
 ┌────────┐  review   ┌────────┐  feedback
 │编 辑   │ ────────→ │读 者   │ ──────────→ 评分+规格验证
-│(6维度) │           │(TDD验证)│
+│(7维度) │           │(TDD验证)│
 └────────┘           └────────┘
                           │
                ┌──────────┼──────────────┐
@@ -79,6 +84,93 @@
                     累计3次未通过 → ⚡ 迭代熔断
                     → 接受/换方向/缩范围/跳过
 ```
+
+## Evaluator 独立化（GAN 启发的 Generator/Evaluator 分离）
+
+借鉴 Anthropic "Harness design for long-running application development" 的核心发现：
+
+> **模型无法可靠地自我评估。** 就像 GAN 中 Generator 和 Discriminator 的对抗关系，
+> 让独立的 Evaluator 来审查 Generator 的产出，能捕获 Generator "自信地"交付的 bug。
+
+### 为什么要隔离？
+
+在之前的设计中，编辑和读者在同一个 context window 内运行，它们"见过"文体家的推理过程。
+这导致：
+- 编辑可能因为知道文体家的意图而**宽容对待**某些问题
+- 读者可能被前序讨论**锚定**，无法给出真实的第一反应
+- 评价结果受 Generator 的 framing 影响，失去独立性
+
+### 隔离策略
+
+```
+文体家(Generator)                    编辑(Evaluator A)    读者(Evaluator B)
+     │                                     ▲                    ▲
+     │ 产出 draft                          │                    │
+     ▼                                     │                    │
+  draft.md ──── 只传文件 ────────→ 独立 subagent        独立 subagent
+                 不传 context              │                    │
+                                          ▼                    ▼
+                                     review.md           feedback.md
+```
+
+**编辑和读者作为独立 subagent 启动，只接收文件，不接收编排器的 session context。**
+
+### 读者额外隔离
+
+读者比编辑还要隔离得更彻底：
+- ❌ 不传入蓝图（读者不应该知道"设计意图"）
+- ❌ 不传入编辑的审阅报告（防止评价锚定）
+- 只传入：正文 + 读者期望规格 + 前章结尾
+
+这确保读者给出的是**真正的第一反应**，而非被前序讨论引导的评价。
+
+## Initializer / Coding Agent 分离（Context 优化）
+
+借鉴 Anthropic "Effective harnesses for long-running agents" 的核心模式：
+**第一个 context window 用不同的 prompt（Initializer），后续 context window 用精简的 prompt（Coding Agent）。**
+
+### 问题
+
+每次章节流水线启动或恢复时，都要读取 4 个完整状态文件（story-state、characters、outline、continuity-state）。
+这些文件随着创作推进会越来越大，吃掉大量 context window。
+
+### 解决方案：章节工作简报
+
+```
+首次启动（Initializer）：
+  读取全量状态文件
+       │
+       ▼
+  生成 chapter-{N}-brief.md（精炼版上下文）
+       │
+       ▼
+  进入流水线 Step 1
+
+后续恢复（Coding Agent）：
+  读取 pipeline-state.md（知道在哪）
+       │
+       ▼
+  读取 chapter-{N}-brief.md（精炼上下文，非全量状态）
+       │
+       ▼
+  读取已完成 Step 的产出文件
+       │
+       ▼
+  从中断点继续
+```
+
+### 章节工作简报内容
+
+模板见 `references/chapter-brief-template.md`，包含：
+- 故事背景精炼版（一句话级别）
+- 前情概要（从即时记忆提取）
+- 前章结尾原文（200字，用于文字衔接）
+- 本章任务（从大纲提取）
+- 活跃人物（只列本章出场的）
+- 活跃伏笔（只列与本章相关的）
+- 写作约束提醒
+
+**关键原则：Initializer 做一次重活，Coding Agent 享受精炼结果。**
 
 ## 新增Agent：蓝图合规审查
 
@@ -276,6 +368,52 @@ Agent 指令：`.claude/agents/spec-reviewer.md`
 - 执行结果：[最终处理方式]
 ```
 
+## 流水线持久化（Harness Engineering：跨 Session 断点续写）
+
+借鉴 Anthropic "Effective harnesses for long-running agents" 的 progress tracking 模式。
+
+### 核心机制
+
+每本书维护一个 `pipeline-state.md` 文件，精确记录流水线执行位置：
+
+```
+pipeline-state.md 状态机：
+
+  无活跃流水线（模板初始状态）
+        │
+        ▼ /write-novel chapter 或 auto
+  Step 1 in_progress → completed → Step 2 in_progress → ...
+        │                                    │
+        │ session 中断                        │ session 中断
+        ▼                                    ▼
+  新 session 读取 pipeline-state.md
+        │
+        ├─ 作者选"继续" → 读取已完成产出 → 从 in_progress Step 重启
+        └─ 作者选"重来" → 重置状态 → 从 Step 1 开始
+```
+
+### 编排器职责
+
+**每个 Step 执行前后必须更新 `pipeline-state.md`**，这是 harness 层的核心约束：
+
+| 时机 | 操作 |
+|------|------|
+| Step 开始前 | 状态 → `in_progress`，记录时间 |
+| Step 完成后 | 状态 → `completed`，填入产出文件名 |
+| Step 失败 | 状态 → `failed`，记录原因 |
+| 迭代回退 | 更新迭代计数、根因、回退目标 |
+| 定稿完成 | 清空为模板初始状态 |
+
+### 断点续写时的 Context 构建
+
+恢复时不需要重读全量状态——只需：
+
+1. `pipeline-state.md`（知道在哪）
+2. 已 completed Step 的产出文件（知道上游结果）
+3. `story-state.md` 基本信息（知道背景）
+
+这比每次都加载全部状态文件更节省 context。
+
 ## 多本书管理
 
 每本书在 `books/` 下有完全独立的工作空间：
@@ -286,12 +424,14 @@ books/
 │   ├── story-state.md
 │   ├── characters.md
 │   ├── outline.md
+│   ├── pipeline-state.md  # 流水线断点（跨session持久化）
 │   ├── chapters/
 │   └── drafts/
 └── 金融猎手/
     ├── story-state.md
     ├── characters.md
     ├── outline.md
+    ├── pipeline-state.md
     ├── chapters/
     └── drafts/
 ```
