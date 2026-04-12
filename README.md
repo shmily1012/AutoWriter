@@ -54,6 +54,7 @@ books/{书名}/                  # 每本书独立目录
   ├── story-state.md           # 故事状态
   ├── characters.md            # 人物图谱
   ├── outline.md               # 大纲
+  ├── pipeline-state.md        # 流水线断点状态（跨session持久化）
   ├── chapters/                # 定稿章节
   └── drafts/                  # 流水线中间产物
 ```
