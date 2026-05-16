@@ -16,7 +16,9 @@ AutoWriter 是一个基于 Claude Code Skill 的工程化多 Agent 网文创作�
 详见各 Agent 定义中的"稳定接口"和"模型适配层"段落，以及 `references/model-adaptations.md`。
 
 ## Structure
-- `.claude/skills/write-novel/` — 主编排 Skill
+- `.claude/skills/auto-write/` — 一段话直出章节的快入口（包装 write-novel）
+- `.claude/skills/story-planning/` — 深度企划入口（8阶段对话）
+- `.claude/skills/write-novel/` — 主编排 Skill（完整 8-Agent 流水线）
 - `.claude/skills/*/` — Superpowers 工程化技能（TDD、调试、代码审查等，已适配为创作工作流）
 - `.claude/agents/` — 8 个 Agent 定义（每个包含稳定接口 + 模型适配层）：
   - `architect.md` — 架构师：故事结构 + 读者期望规格生成

@@ -32,17 +32,41 @@
 
 ## 使用
 
-在 Claude Code 中：
+### 🚀 最快入口：一段话直出章节
 
 ```
-/write-novel init "我的小说"     # 初始化新书
-/write-novel chapter "我的小说" 1 # 写第1章（交互模式）
+/auto-write "<你的灵感段落>"             # 智能问几个关键问题后产出1章
+/auto-write "<段落>" 章节数=2           # 一次写2章
+/auto-write continue "我的小说"          # 续写已有书的下一章
+```
+
+`/auto-write` 把"先 init 再 chapter"两步合一：
+1. 解析段落，识别题材/主角/金手指/冲突
+2. 最多问 5 个关键问题（都附建议默认值，说"OK"就用默认）
+3. 必要时调用研究员联网查询真实背景
+4. 自动生成项目骨架（story-state、characters、outline）
+5. 调用完整 8-Agent 流水线写章节
+6. 输出章节文件 + 追读分 + 规格通过率
+
+### 🎯 完整入口（参与每一步）
+
+```
+/write-novel init "我的小说"     # 初始化新书（5轮深度brainstorm）
+/write-novel chapter "我的小说" 1 # 写第1章（每个Agent都参与brainstorm）
 /write-novel auto "我的小说" 2   # 自动写第2章
 /write-novel status "我的小说"   # 查看进度
 /write-novel list               # 列出所有书
 /write-novel review "我的小说" 1 # 审阅第1章
 /write-novel research "话题"    # 查询真实信息
 ```
+
+### 🧭 深度企划入口（先想透再写）
+
+```
+/story-planning "<灵感关键词>"  # 8阶段深度对话企划，产出企划书
+```
+
+完成企划后再 `/write-novel init` 或 `/auto-write`，流程会自动复用企划书内容。
 
 ## 目录结构
 
